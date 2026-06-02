@@ -1,0 +1,54 @@
+name: Update Codex
+
+on:
+  schedule:
+    # GitHub Actions schedules are UTC. This checks once per hour.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-codex
+  cancel-in-progress: false
+
+jobs:
+  update-codex:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Configure git author
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Update Codex package pins
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: nix develop -c packages/codex/update.py
+
+      - name: Validate flake evaluation
+        run: nix flake check --no-build --print-build-logs
+
+      - name: Commit and push if Codex changed
+        run: |
+          if git diff --quiet; then
+            echo "Codex is already up to date."
+            exit 0
+          fi
+
+          new_version="$(nix eval .#codex.version --raw)"
+          git add packages/codex/hashes.json flake.lock
+          git commit -m "codex: update to ${new_version}"
+          git push

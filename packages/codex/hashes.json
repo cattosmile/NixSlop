@@ -1,0 +1,21 @@
+{
+  "version": "0.136.0",
+  "hash": "sha256-MI9VrfMFuUOup0e8KECaFA8SbkrPLEG+6K/wqLA8rs8=",
+  "cargoHash": "sha256-zHNOUHUnyNxYSWn13H77ZdIuv09kHSlJfQBatTugLUA=",
+  "librusty_v8": {
+    "version": "147.4.0",
+    "hashes": {
+      "x86_64-linux": "sha256-Cd3vbFEZKv/wVBExoO+cAPgxhdI5HaqxgDgqOr82rJU=",
+      "aarch64-linux": "sha256-lMPw/eAFFAT8obaR8opJbXjbgw58+0maBEyxpeOllFU=",
+      "x86_64-darwin": "sha256-+ppR8dMhVTSZL0PPar+DlKZ0K+E5N7WfdXXfBTYel+Y=",
+      "aarch64-darwin": "sha256-fnR0DD7woOj8DiaKJYYSPpg0D+lDVmjNwSiPrvtzYq4="
+    }
+  },
+  "livekit_webrtc": {
+    "tag": "webrtc-24f6822-2",
+    "hashes": {
+      "x86_64-darwin": "sha256-XapngujlXtcDEGd2hacmP3nHFycEVZRybO/ORHPc6Og=",
+      "aarch64-darwin": "sha256-4IwJM6EzTFgQd2AdX+Hj9NWzmyqXrSioRax2L6GKL1U="
+    }
+  }
+}
