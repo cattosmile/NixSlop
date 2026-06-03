@@ -58,7 +58,7 @@ Purpose: install Codex CLI and OMX as one managed bundle, then keep OMX plugin s
 
 ## Automation
 
-`.github/workflows/update-codex.yml` runs on a schedule. It currently:
+`.github/workflows/update-packages.yml` runs on a schedule. It currently:
 
 1. checks the latest stable Codex release and latest stable OMX npm version,
 2. refreshes package hashes when newer versions exist,

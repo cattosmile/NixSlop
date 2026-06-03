@@ -1,4 +1,4 @@
-name: Update Codex and OMX
+name: Update Packages
 
 on:
   schedule:
@@ -10,11 +10,11 @@ permissions:
   contents: write
 
 concurrency:
-  group: update-codex
+  group: update-packages
   cancel-in-progress: false
 
 jobs:
-  update-codex:
+  update-packages:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -49,7 +49,7 @@ jobs:
       - name: Commit and push if packages changed
         run: |
           if git diff --quiet; then
-            echo "Codex and OMX are already up to date."
+            echo "All tracked packages are already up to date."
             exit 0
           fi
 
