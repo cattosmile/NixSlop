@@ -17,6 +17,7 @@ from updater import (  # noqa: E402
     calculate_dependency_hash,
     calculate_url_hash,
     fetch_npm_version,
+    fetch_text,
     load_hashes,
     save_hashes,
     should_update,
@@ -25,6 +26,7 @@ from updater.hash import DUMMY_SHA256_HASH  # noqa: E402
 from updater.nix import NixCommandError  # noqa: E402
 
 HASHES_FILE = Path(__file__).parent / "hashes.json"
+CARGO_LOCK_FILE = Path(__file__).parent / "Cargo.lock"
 
 
 def main() -> None:
@@ -43,6 +45,12 @@ def main() -> None:
 
     print("Calculating source hash...")
     source_hash = calculate_url_hash(url, unpack=True)
+
+    print("Refreshing Cargo.lock...")
+    cargo_lock = fetch_text(
+        f"https://raw.githubusercontent.com/Yeachan-Heo/oh-my-codex/v{latest}/Cargo.lock"
+    )
+    CARGO_LOCK_FILE.write_text(cargo_lock)
 
     data = {
         "version": latest,
