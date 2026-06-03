@@ -1,4 +1,4 @@
-name: Update Codex
+name: Update Codex and OMX
 
 on:
   schedule:
@@ -33,22 +33,39 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Update Codex package pins
+      - name: Update package pins
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: nix develop -c packages/codex/update.py
+        run: |
+          nix develop -c packages/codex/update.py
+          nix develop -c packages/oh-my-codex/update.py
 
       - name: Validate flake evaluation
-        run: nix flake check --no-build --print-build-logs
+        run: nix flake check --all-systems --no-build --print-build-logs
 
-      - name: Commit and push if Codex changed
+      - name: Build OMX package smoke
+        run: nix build .#oh-my-codex --print-build-logs
+
+      - name: Commit and push if packages changed
         run: |
           if git diff --quiet; then
-            echo "Codex is already up to date."
+            echo "Codex and OMX are already up to date."
             exit 0
           fi
 
-          new_version="$(nix eval .#codex.version --raw)"
-          git add packages/codex/hashes.json flake.lock
-          git commit -m "codex: update to ${new_version}"
+          changed_files="$(git diff --name-only)"
+          codex_version="$(nix eval .#codex.version --raw)"
+          omx_version="$(nix eval .#oh-my-codex.version --raw)"
+
+          git add packages/codex/hashes.json packages/oh-my-codex/hashes.json flake.lock
+
+          if grep -q '^packages/codex/' <<< "$changed_files" && grep -q '^packages/oh-my-codex/' <<< "$changed_files"; then
+            message="update codex to ${codex_version} and omx to ${omx_version}"
+          elif grep -q '^packages/oh-my-codex/' <<< "$changed_files"; then
+            message="omx: update to ${omx_version}"
+          else
+            message="codex: update to ${codex_version}"
+          fi
+
+          git commit -m "$message"
           git push
