@@ -26,7 +26,7 @@ let
     pname = "oh-my-codex-native-tools";
     inherit version src;
 
-    cargoLock.lockFile = "${src}/Cargo.lock";
+    cargoLock.lockFile = ./Cargo.lock;
     cargoBuildFlags = [
       "--workspace"
       "--bins"
