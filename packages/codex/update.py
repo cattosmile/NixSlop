@@ -152,7 +152,7 @@ def main() -> None:
         save_hashes(HASHES_FILE, data)
     except (ValueError, NixCommandError) as e:
         print(f"Error: {e}")
-        return
+        raise SystemExit(1) from e
 
     print(f"Updated to {latest}")
 
