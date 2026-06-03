@@ -27,34 +27,14 @@
         let
           pkgs = pkgsFor system;
         in
-        rec {
+        let
           codex = pkgs.callPackage ./packages/codex/package.nix { };
-          oh-my-codex = pkgs.callPackage ./packages/oh-my-codex/package.nix {
-            inherit codex;
-          };
-          omx = oh-my-codex;
-          default = codex;
+        in
+        {
+          inherit codex;
+          oh-my-codex = pkgs.callPackage ./packages/oh-my-codex/package.nix { inherit codex; };
         }
       );
-
-      apps = eachSystem (system: {
-        codex = {
-          type = "app";
-          program = "${self.packages.${system}.codex}/bin/codex";
-        };
-        omx = {
-          type = "app";
-          program = "${self.packages.${system}.oh-my-codex}/bin/omx";
-        };
-        default = self.apps.${system}.codex;
-      });
-
-      overlays.default = final: _prev: {
-        nixslop = self.packages.${final.stdenv.hostPlatform.system};
-        codex-latest = self.packages.${final.stdenv.hostPlatform.system}.codex;
-        oh-my-codex = self.packages.${final.stdenv.hostPlatform.system}.oh-my-codex;
-        omx-latest = self.packages.${final.stdenv.hostPlatform.system}.oh-my-codex;
-      };
 
       homeManagerModules.codexOmx =
         {
