@@ -57,7 +57,7 @@ jobs:
           codex_version="$(nix eval .#codex.version --raw)"
           omx_version="$(nix eval .#oh-my-codex.version --raw)"
 
-          git add packages/codex/hashes.json packages/oh-my-codex/hashes.json flake.lock
+          git add packages/codex/hashes.json packages/oh-my-codex/hashes.json packages/oh-my-codex/Cargo.lock flake.lock
 
           if grep -q '^packages/codex/' <<< "$changed_files" && grep -q '^packages/oh-my-codex/' <<< "$changed_files"; then
             message="update codex to ${codex_version} and omx to ${omx_version}"

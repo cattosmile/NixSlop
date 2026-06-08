@@ -50,6 +50,8 @@ def main() -> None:
     cargo_lock = fetch_text(
         f"https://raw.githubusercontent.com/Yeachan-Heo/oh-my-codex/v{latest}/Cargo.lock"
     )
+    if CARGO_LOCK_FILE.exists():
+        CARGO_LOCK_FILE.chmod(0o644)
     CARGO_LOCK_FILE.write_text(cargo_lock)
 
     data = {
