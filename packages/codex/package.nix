@@ -105,9 +105,18 @@ rustPlatform.buildRustPackage {
     # builder. Use ThinLTO + 16 codegen-units instead: keeps memory bounded
     # while shrinking __TEXT below the 128 MiB ARM64 branch range, which the
     # default Mach-O linker hit on aarch64-darwin (#4417).
-    substituteInPlace Cargo.toml \
-      --replace-fail 'lto = "fat"' 'lto = "thin"' \
-      --replace-fail 'codegen-units = 1' 'codegen-units = 16'
+    # Keep this patch tolerant: upstream may independently adopt parts of
+    # the memory/linker workaround.  Codex 0.139.0 already ships ThinLTO, so
+    # only rewrite keys when the exact old value is still present.
+    if grep -Fqx 'lto = "fat"' Cargo.toml; then
+      substituteInPlace Cargo.toml \
+        --replace-fail 'lto = "fat"' 'lto = "thin"'
+    fi
+
+    if grep -Fqx 'codegen-units = 1' Cargo.toml; then
+      substituteInPlace Cargo.toml \
+        --replace-fail 'codegen-units = 1' 'codegen-units = 16'
+    fi
   '';
 
   postFixup = lib.optionalString stdenv.hostPlatform.isLinux ''
