@@ -2,12 +2,19 @@ name: Update Packages
 
 on:
   schedule:
-    # GitHub Actions schedules are UTC. This checks once per hour.
-    - cron: '17 * * * *'
+    # GitHub Actions schedules are UTC. Run 4x/day instead of hourly so
+    # transient upstream release churn has time to settle, while still keeping
+    # fast-moving app pins fresh.
+    - cron: '17 0,6,12,18 * * *'
   workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: update-packages
@@ -33,6 +40,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Prepare update branch
+        env:
+          BRANCH: update/packages
+        run: |
+          git fetch origin main
+
+          if git fetch origin "$BRANCH"; then
+            echo "Reusing existing branch $BRANCH"
+            git checkout -B "$BRANCH" "origin/$BRANCH"
+            if ! git rebase origin/main; then
+              echo "::warning::Rebase of $BRANCH onto main failed; discarding stale update branch"
+              git rebase --abort
+              git reset --hard origin/main
+            fi
+          else
+            git checkout -B "$BRANCH" origin/main
+          fi
+
       - name: Update package pins
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -46,26 +71,80 @@ jobs:
       - name: Build OMX package smoke
         run: nix build .#oh-my-codex --print-build-logs
 
-      - name: Commit and push if packages changed
+      - name: Create or update package update PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: update/packages
         run: |
-          if git diff --quiet; then
+          changed_files="$(git diff --name-only)"
+
+          if [ -n "$changed_files" ]; then
+            codex_version="$(nix eval .#codex.version --raw)"
+            omx_version="$(nix eval .#oh-my-codex.version --raw)"
+
+            git add \
+              packages/codex/hashes.json \
+              packages/oh-my-codex/hashes.json \
+              packages/oh-my-codex/Cargo.lock \
+              flake.lock
+
+            if grep -q '^packages/codex/' <<< "$changed_files" && grep -q '^packages/oh-my-codex/' <<< "$changed_files"; then
+              message="update codex to ${codex_version} and omx to ${omx_version}"
+              title="codex: ${codex_version}, omx: ${omx_version}"
+            elif grep -q '^packages/oh-my-codex/' <<< "$changed_files"; then
+              message="omx: update to ${omx_version}"
+              title="omx: update to ${omx_version}"
+            else
+              message="codex: update to ${codex_version}"
+              title="codex: update to ${codex_version}"
+            fi
+
+            git commit -m "$message"
+          else
+            codex_version="$(nix eval .#codex.version --raw)"
+            omx_version="$(nix eval .#oh-my-codex.version --raw)"
+            title="package updates"
+          fi
+
+          if git diff --quiet origin/main...HEAD; then
             echo "All tracked packages are already up to date."
             exit 0
           fi
 
-          changed_files="$(git diff --name-only)"
-          codex_version="$(nix eval .#codex.version --raw)"
-          omx_version="$(nix eval .#oh-my-codex.version --raw)"
+          git push --force-with-lease origin "HEAD:$BRANCH"
 
-          git add packages/codex/hashes.json packages/oh-my-codex/hashes.json packages/oh-my-codex/Cargo.lock flake.lock
+          pr_number="$(gh pr list --head "$BRANCH" --json number --jq '.[0].number // empty')"
+          body="$(cat <<EOF
+          Automated package update for NixSlop.
 
-          if grep -q '^packages/codex/' <<< "$changed_files" && grep -q '^packages/oh-my-codex/' <<< "$changed_files"; then
-            message="update codex to ${codex_version} and omx to ${omx_version}"
-          elif grep -q '^packages/oh-my-codex/' <<< "$changed_files"; then
-            message="omx: update to ${omx_version}"
+          Validated in this workflow:
+          - nix flake check --all-systems --no-build --print-build-logs
+          - nix build .#oh-my-codex --print-build-logs
+
+          Current evaluated versions:
+          - codex: ${codex_version}
+          - oh-my-codex: ${omx_version}
+          EOF
+          )"
+
+          if [ -n "$pr_number" ]; then
+            echo "Updating existing PR #$pr_number"
+            gh pr edit "$pr_number" --title "$title" --body "$body"
           else
-            message="codex: update to ${codex_version}"
+            echo "Creating package update PR"
+            gh label create dependencies --color 0366d6 --description "Dependency updates" || true
+            gh label create automated --color cfd3d7 --description "Automated changes" || true
+            gh pr create \
+              --base main \
+              --head "$BRANCH" \
+              --title "$title" \
+              --body "$body" \
+              --label dependencies \
+              --label automated
+            pr_number="$(gh pr list --head "$BRANCH" --json number --jq '.[0].number // empty')"
           fi
 
-          git commit -m "$message"
-          git push
+          if [ -n "$pr_number" ]; then
+            gh pr merge "$pr_number" --auto --squash || \
+              echo "::warning::Could not enable auto-merge for PR #$pr_number. Enable repository auto-merge or merge the green PR manually."
+          fi
