@@ -1,6 +1,5 @@
 {
   lib,
-  stdenv,
   buildNpmPackage,
   fetchFromGitHub,
   makeWrapper,
@@ -74,11 +73,15 @@ buildNpmPackage {
   nativeBuildInputs = [ makeWrapper ];
 
   postPatch = ''
-        substituteInPlace src/cli/plugin-marketplace.ts \
-          --replace-fail 'import { cp, readdir, readFile, rm, writeFile } from "fs/promises";' \
-            'import { chmod, cp, readdir, readFile, rm, writeFile } from "fs/promises";' \
-          --replace-fail 'async function applyTeamModeToPluginCache' \
-            'async function makePluginCacheWritable(cacheDir: string): Promise<void> {
+    if ! grep -Fq "chmod" src/cli/plugin-marketplace.ts; then
+      substituteInPlace src/cli/plugin-marketplace.ts \
+        --replace-fail 'import { cp, ' 'import { chmod, cp, '
+    fi
+
+    if ! grep -Fq "makePluginCacheWritable" src/cli/plugin-marketplace.ts; then
+      substituteInPlace src/cli/plugin-marketplace.ts \
+        --replace-fail 'async function applyTeamModeToPluginCache' \
+          'async function makePluginCacheWritable(cacheDir: string): Promise<void> {
       async function visit(dir: string): Promise<void> {
         await chmod(dir, 0o755).catch(() => undefined);
         const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
@@ -94,12 +97,23 @@ buildNpmPackage {
       await visit(cacheDir);
     }
 
-    async function applyTeamModeToPluginCache' \
-          --replace-fail 'await cp(packagedMarketplace.pluginRoot, cacheDir, { recursive: true });
-    		await applyTeamModeToPluginCache(cacheDir, options.teamMode);' \
-            'await cp(packagedMarketplace.pluginRoot, cacheDir, { recursive: true });
-    		await makePluginCacheWritable(cacheDir);
-    		await applyTeamModeToPluginCache(cacheDir, options.teamMode);'
+    async function applyTeamModeToPluginCache'
+    fi
+
+    if grep -Fq 'await cp(packagedMarketplace.pluginRoot, cacheDir, { recursive: true });' src/cli/plugin-marketplace.ts; then
+      substituteInPlace src/cli/plugin-marketplace.ts \
+        --replace-fail 'await cp(packagedMarketplace.pluginRoot, cacheDir, { recursive: true });' \
+          'await cp(packagedMarketplace.pluginRoot, cacheDir, { recursive: true });
+        await makePluginCacheWritable(cacheDir);'
+    elif grep -Fq 'await cp(packagedMarketplace.pluginRoot, tempDir, { recursive: true });' src/cli/plugin-marketplace.ts; then
+      substituteInPlace src/cli/plugin-marketplace.ts \
+        --replace-fail 'await cp(packagedMarketplace.pluginRoot, tempDir, { recursive: true });' \
+          'await cp(packagedMarketplace.pluginRoot, tempDir, { recursive: true });
+        await makePluginCacheWritable(tempDir);'
+    else
+      echo "could not find packaged OMX plugin cache copy target in src/cli/plugin-marketplace.ts" >&2
+      exit 1
+    fi
   '';
 
   postInstall = ''
