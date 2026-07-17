@@ -5,6 +5,13 @@
 - `x86_64-linux`
 - `aarch64-linux`
 
+## Included
+
+- OpenCode: `opencode`
+- Codex Desktop: `codex-desktop`
+- Kimi Code: `kimi`
+- Codex + OMX: `codex`, `omx`, `tmux`
+
 ## Use from Home Manager
 
 ```nix
@@ -51,7 +58,31 @@ inputs.nixslop.url = "github:cattosmile/NixSlop";
 }
 ```
 
-## Cachix
+## Enable everything
+
+```nix
+{
+  imports = [
+    inputs.nixslop.homeManagerModules.openCode
+    inputs.nixslop.homeManagerModules.codexDesktop
+    inputs.nixslop.homeManagerModules.kimiCode
+    inputs.nixslop.homeManagerModules.codexOmx
+  ];
+
+  programs.openCode.enable = true;
+  programs.codexDesktopLinux.enable = true;
+  programs.kimiCode.enable = true;
+  programs.codexOmx.enable = true;
+}
+```
+
+## Optional
+
+```nix
+programs.codexOmx.setupPlugin = false;
+```
+
+## Cachix (NixOS configuration)
 
 ```nix
 nix.settings = {
@@ -64,7 +95,16 @@ nix.settings = {
 
 ## Update
 
+### Home Manager
+
 ```sh
 nix flake update nixslop
 home-manager switch
+```
+
+### NixOS
+
+```sh
+nix flake update nixslop
+sudo nixos-rebuild switch --flake .#hostname
 ```
