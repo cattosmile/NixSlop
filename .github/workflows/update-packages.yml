@@ -68,6 +68,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          nix flake update codex-desktop-linux
           nix develop -c packages/codex/update.py
           nix develop -c packages/kimi-code/update.py
           nix develop -c packages/oh-my-codex/update.py
@@ -78,10 +79,12 @@ jobs:
       - name: Build and smoke test cached packages
         run: |
           codex_path="$(nix build --no-link --print-out-paths .#codex --print-build-logs)"
+          codex_desktop_path="$(nix build --no-link --print-out-paths .#codex-desktop --print-build-logs)"
           kimi_path="$(nix build --no-link --print-out-paths .#kimi-code --print-build-logs)"
           omx_path="$(nix build --no-link --print-out-paths .#oh-my-codex --print-build-logs)"
 
           test -x "$codex_path/bin/codex"
+          test -x "$codex_desktop_path/bin/codex-desktop"
           test -x "$kimi_path/bin/kimi"
           test -x "$omx_path/bin/omx"
           "$codex_path/bin/codex" --version
@@ -97,6 +100,7 @@ jobs:
 
           if [ -n "$changed_files" ]; then
             codex_version="$(nix eval .#codex.version --raw)"
+            codex_desktop_version="$(nix eval .#codex-desktop.version --raw)"
             kimi_version="$(nix eval .#kimi-code.version --raw)"
             omx_version="$(nix eval .#oh-my-codex.version --raw)"
 
@@ -108,11 +112,12 @@ jobs:
               flake.lock
 
             message="update package pins"
-            title="codex: ${codex_version}, kimi-code: ${kimi_version}, omx: ${omx_version}"
+            title="codex: ${codex_version}, desktop: ${codex_desktop_version}, kimi: ${kimi_version}, omx: ${omx_version}"
 
             git commit -m "$message"
           else
             codex_version="$(nix eval .#codex.version --raw)"
+            codex_desktop_version="$(nix eval .#codex-desktop.version --raw)"
             kimi_version="$(nix eval .#kimi-code.version --raw)"
             omx_version="$(nix eval .#oh-my-codex.version --raw)"
             title="package updates"
@@ -131,8 +136,9 @@ jobs:
 
           Validated in this workflow:
           - nix flake check --all-systems --no-build --print-build-logs
-          - nix build .#codex .#kimi-code .#oh-my-codex --print-build-logs
+          - nix build .#codex .#codex-desktop .#kimi-code .#oh-my-codex --print-build-logs
           - codex --version
+          - codex-desktop executable exists
           - kimi --version
           - omx --version
 
@@ -141,6 +147,7 @@ jobs:
 
           Current evaluated versions:
           - codex: ${codex_version}
+          - codex-desktop: ${codex_desktop_version}
           - kimi-code: ${kimi_version}
           - oh-my-codex: ${omx_version}
           EOF
