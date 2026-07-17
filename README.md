@@ -1,5 +1,10 @@
 # NixSlop
 
+## Supported systems
+
+- `x86_64-linux`
+- `aarch64-linux`
+
 ## Use from Home Manager
 
 ```nix
@@ -44,4 +49,22 @@ inputs.nixslop.url = "github:cattosmile/NixSlop";
 
   programs.codexOmx.enable = true;
 }
+```
+
+## Cachix
+
+```nix
+nix.settings = {
+  extra-substituters = [ "https://nixslop.cachix.org?priority=30" ];
+  extra-trusted-public-keys = [
+    "nixslop.cachix.org-1:Y41flUqIXb+Qx7D6hiugUE17RG4EkLaBn3UlVXc1oE8="
+  ];
+};
+```
+
+## Update
+
+```sh
+nix flake update nixslop
+home-manager switch
 ```
