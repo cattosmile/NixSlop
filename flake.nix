@@ -12,6 +12,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     systems.url = "github:nix-systems/default-linux";
     codex-desktop-linux.url = "github:ilysenko/codex-desktop-linux";
+    opencode.url = "github:anomalyco/opencode";
   };
 
   outputs =
@@ -20,6 +21,7 @@
       nixpkgs,
       systems,
       codex-desktop-linux,
+      opencode,
     }:
     let
       eachSystem = nixpkgs.lib.genAttrs (import systems);
@@ -43,9 +45,38 @@
           inherit codex;
           codex-desktop = codex-desktop-linux.packages.${system}.codex-desktop;
           kimi-code = pkgs.callPackage ./packages/kimi-code/package.nix { };
+          opencode = opencode.packages.${system}.opencode;
           oh-my-codex = pkgs.callPackage ./packages/oh-my-codex/package.nix { inherit codex; };
         }
       );
+
+      homeManagerModules.openCode =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          cfg = config.programs.openCode;
+          system = pkgs.stdenv.hostPlatform.system;
+        in
+        {
+          options.programs.openCode = {
+            enable = lib.mkEnableOption "OpenCode CLI";
+
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${system}.opencode;
+              defaultText = lib.literalExpression "inputs.nixslop.packages.${pkgs.stdenv.hostPlatform.system}.opencode";
+              description = "OpenCode CLI package to install.";
+            };
+          };
+
+          config = lib.mkIf cfg.enable {
+            home.packages = [ cfg.package ];
+          };
+        };
 
       homeManagerModules.codexDesktop =
         {

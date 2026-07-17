@@ -69,6 +69,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           nix flake update codex-desktop-linux
+          nix flake update opencode
           nix develop -c packages/codex/update.py
           nix develop -c packages/kimi-code/update.py
           nix develop -c packages/oh-my-codex/update.py
@@ -81,14 +82,17 @@ jobs:
           codex_path="$(nix build --no-link --print-out-paths .#codex --print-build-logs)"
           codex_desktop_path="$(nix build --no-link --print-out-paths .#codex-desktop --print-build-logs)"
           kimi_path="$(nix build --no-link --print-out-paths .#kimi-code --print-build-logs)"
+          opencode_path="$(nix build --no-link --print-out-paths .#opencode --print-build-logs)"
           omx_path="$(nix build --no-link --print-out-paths .#oh-my-codex --print-build-logs)"
 
           test -x "$codex_path/bin/codex"
           test -x "$codex_desktop_path/bin/codex-desktop"
           test -x "$kimi_path/bin/kimi"
+          test -x "$opencode_path/bin/opencode"
           test -x "$omx_path/bin/omx"
           "$codex_path/bin/codex" --version
           "$kimi_path/bin/kimi" --version
+          "$opencode_path/bin/opencode" --version
           "$omx_path/bin/omx" --version
 
       - name: Create or update package update PR
@@ -102,6 +106,7 @@ jobs:
             codex_version="$(nix eval .#codex.version --raw)"
             codex_desktop_version="$(nix eval .#codex-desktop.version --raw)"
             kimi_version="$(nix eval .#kimi-code.version --raw)"
+            opencode_version="$(nix eval .#opencode.version --raw)"
             omx_version="$(nix eval .#oh-my-codex.version --raw)"
 
             git add \
@@ -112,13 +117,14 @@ jobs:
               flake.lock
 
             message="update package pins"
-            title="codex: ${codex_version}, desktop: ${codex_desktop_version}, kimi: ${kimi_version}, omx: ${omx_version}"
+            title="codex: ${codex_version}, desktop: ${codex_desktop_version}, kimi: ${kimi_version}, opencode: ${opencode_version}, omx: ${omx_version}"
 
             git commit -m "$message"
           else
             codex_version="$(nix eval .#codex.version --raw)"
             codex_desktop_version="$(nix eval .#codex-desktop.version --raw)"
             kimi_version="$(nix eval .#kimi-code.version --raw)"
+            opencode_version="$(nix eval .#opencode.version --raw)"
             omx_version="$(nix eval .#oh-my-codex.version --raw)"
             title="package updates"
           fi
@@ -136,10 +142,11 @@ jobs:
 
           Validated in this workflow:
           - nix flake check --all-systems --no-build --print-build-logs
-          - nix build .#codex .#codex-desktop .#kimi-code .#oh-my-codex --print-build-logs
+          - nix build .#codex .#codex-desktop .#kimi-code .#opencode .#oh-my-codex --print-build-logs
           - codex --version
           - codex-desktop executable exists
           - kimi --version
+          - opencode --version
           - omx --version
 
           Binary cache:
@@ -149,6 +156,7 @@ jobs:
           - codex: ${codex_version}
           - codex-desktop: ${codex_desktop_version}
           - kimi-code: ${kimi_version}
+          - opencode: ${opencode_version}
           - oh-my-codex: ${omx_version}
           EOF
           )"
