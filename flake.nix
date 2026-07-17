@@ -11,6 +11,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     systems.url = "github:nix-systems/default-linux";
+    codex-desktop-linux.url = "github:ilysenko/codex-desktop-linux";
   };
 
   outputs =
@@ -18,6 +19,7 @@
       self,
       nixpkgs,
       systems,
+      codex-desktop-linux,
     }:
     let
       eachSystem = nixpkgs.lib.genAttrs (import systems);
@@ -39,10 +41,26 @@
         in
         {
           inherit codex;
+          codex-desktop = codex-desktop-linux.packages.${system}.codex-desktop;
           kimi-code = pkgs.callPackage ./packages/kimi-code/package.nix { };
           oh-my-codex = pkgs.callPackage ./packages/oh-my-codex/package.nix { inherit codex; };
         }
       );
+
+      homeManagerModules.codexDesktop =
+        {
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          system = pkgs.stdenv.hostPlatform.system;
+        in
+        {
+          imports = [ codex-desktop-linux.homeManagerModules.default ];
+
+          programs.codexDesktopLinux.cliPackage = lib.mkDefault self.packages.${system}.codex;
+        };
 
       homeManagerModules.kimiCode =
         {

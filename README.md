@@ -44,7 +44,7 @@ home-manager switch
 
 or the equivalent `nixos-rebuild switch --flake ...` flow if Home Manager is managed by NixOS.
 
-Codex, Kimi Code, and OMX are built by the update workflow and published to the public
+Codex CLI, Codex Desktop, Kimi Code, and OMX are built by the update workflow and published to the public
 `nixslop` Cachix binary cache. NixOS hosts should configure that cache so a
 switch downloads the signed Nix store paths instead of rebuilding the apps:
 
@@ -63,6 +63,20 @@ preferred because it works non-interactively during Home Manager and NixOS
 switches.
 
 ## Currently available modules
+
+### `homeManagerModules.codexDesktop`
+
+Enable with:
+
+```nix
+imports = [ inputs.nixslop.homeManagerModules.codexDesktop ];
+programs.codexDesktopLinux.enable = true;
+```
+
+Purpose: install the upstream ChatGPT/Codex Desktop Linux package while wiring
+its launcher directly to NixSlop's managed Codex CLI. The daily workflow updates
+the pinned upstream flake and publishes the built desktop app to the NixSlop
+binary cache.
 
 ### `homeManagerModules.kimiCode`
 
@@ -89,11 +103,11 @@ Purpose: install Codex CLI and OMX as one managed bundle, then keep OMX plugin s
 
 `.github/workflows/update-packages.yml` runs once per day at 03:17 UTC. It currently:
 
-1. checks the latest stable Codex, Kimi Code, and OMX releases,
+1. checks the latest stable Codex CLI, Codex Desktop, Kimi Code, and OMX releases,
 2. refreshes package hashes when newer versions exist,
 3. refreshes the vendored OMX `Cargo.lock` used for reproducible Rust helper builds,
 4. validates flake evaluation across supported systems,
-5. builds and smoke-tests Codex, Kimi Code, and OMX,
+5. builds and smoke-tests Codex CLI, Codex Desktop, Kimi Code, and OMX,
 6. publishes their signed runtime closures to `nixslop.cachix.org`, and
 7. commits changed pins to an update branch and maintains an auto-merge PR.
 
