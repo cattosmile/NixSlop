@@ -69,6 +69,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           nix develop -c packages/codex/update.py
+          nix develop -c packages/kimi-code/update.py
           nix develop -c packages/oh-my-codex/update.py
 
       - name: Validate flake evaluation
@@ -77,11 +78,14 @@ jobs:
       - name: Build and smoke test cached packages
         run: |
           codex_path="$(nix build --no-link --print-out-paths .#codex --print-build-logs)"
+          kimi_path="$(nix build --no-link --print-out-paths .#kimi-code --print-build-logs)"
           omx_path="$(nix build --no-link --print-out-paths .#oh-my-codex --print-build-logs)"
 
           test -x "$codex_path/bin/codex"
+          test -x "$kimi_path/bin/kimi"
           test -x "$omx_path/bin/omx"
           "$codex_path/bin/codex" --version
+          "$kimi_path/bin/kimi" --version
           "$omx_path/bin/omx" --version
 
       - name: Create or update package update PR
@@ -93,28 +97,23 @@ jobs:
 
           if [ -n "$changed_files" ]; then
             codex_version="$(nix eval .#codex.version --raw)"
+            kimi_version="$(nix eval .#kimi-code.version --raw)"
             omx_version="$(nix eval .#oh-my-codex.version --raw)"
 
             git add \
               packages/codex/hashes.json \
+              packages/kimi-code/hashes.json \
               packages/oh-my-codex/hashes.json \
               packages/oh-my-codex/Cargo.lock \
               flake.lock
 
-            if grep -q '^packages/codex/' <<< "$changed_files" && grep -q '^packages/oh-my-codex/' <<< "$changed_files"; then
-              message="update codex to ${codex_version} and omx to ${omx_version}"
-              title="codex: ${codex_version}, omx: ${omx_version}"
-            elif grep -q '^packages/oh-my-codex/' <<< "$changed_files"; then
-              message="omx: update to ${omx_version}"
-              title="omx: update to ${omx_version}"
-            else
-              message="codex: update to ${codex_version}"
-              title="codex: update to ${codex_version}"
-            fi
+            message="update package pins"
+            title="codex: ${codex_version}, kimi-code: ${kimi_version}, omx: ${omx_version}"
 
             git commit -m "$message"
           else
             codex_version="$(nix eval .#codex.version --raw)"
+            kimi_version="$(nix eval .#kimi-code.version --raw)"
             omx_version="$(nix eval .#oh-my-codex.version --raw)"
             title="package updates"
           fi
@@ -132,8 +131,9 @@ jobs:
 
           Validated in this workflow:
           - nix flake check --all-systems --no-build --print-build-logs
-          - nix build .#codex .#oh-my-codex --print-build-logs
+          - nix build .#codex .#kimi-code .#oh-my-codex --print-build-logs
           - codex --version
+          - kimi --version
           - omx --version
 
           Binary cache:
@@ -141,6 +141,7 @@ jobs:
 
           Current evaluated versions:
           - codex: ${codex_version}
+          - kimi-code: ${kimi_version}
           - oh-my-codex: ${omx_version}
           EOF
           )"
