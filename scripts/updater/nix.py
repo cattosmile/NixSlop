@@ -16,6 +16,7 @@ def run_command(
     check: bool = True,
     capture_output: bool = True,
     cwd: Path | None = None,
+    timeout: float | None = 7200,
 ) -> subprocess.CompletedProcess[str]:
     """Run a command and return the result.
 
@@ -24,6 +25,7 @@ def run_command(
         check: Whether to raise exception on non-zero exit
         capture_output: Whether to capture stdout/stderr
         cwd: Working directory for the command
+        timeout: Maximum runtime in seconds; None disables the limit
 
     Returns:
         CompletedProcess with command results
@@ -39,6 +41,7 @@ def run_command(
             capture_output=capture_output,
             text=True,
             cwd=cwd,
+            timeout=timeout,
         )
     except subprocess.CalledProcessError as e:
         msg = (
@@ -50,6 +53,13 @@ def run_command(
         raise NixCommandError(
             msg,
         ) from e
+    except subprocess.TimeoutExpired as e:
+        msg = (
+            f"Command timed out after {e.timeout} seconds: {' '.join(cmd)}\n"
+            f"Stdout: {e.stdout}\n"
+            f"Stderr: {e.stderr}"
+        )
+        raise NixCommandError(msg) from e
 
 
 def nix_command(

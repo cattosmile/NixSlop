@@ -4,7 +4,7 @@ import re
 from typing import cast
 
 from .http import fetch_json, fetch_text
-from .nix import run_command
+from .nix import NixCommandError, run_command
 
 
 def fetch_github_latest_release(owner: str, repo: str) -> str:
@@ -44,8 +44,8 @@ def fetch_npm_version(package: str) -> str:
         cmd = ["npm", "view", package, "version"]
         result = run_command(cmd)
         return result.stdout.strip()
-    except (FileNotFoundError, OSError):
-        # npm command not available, fallback to registry API
+    except (FileNotFoundError, NixCommandError, OSError):
+        # npm is unavailable or failed; fall back to the registry API.
         url = f"https://registry.npmjs.org/{package}/latest"
         data = fetch_json(url)
         if not isinstance(data, dict):
@@ -56,15 +56,16 @@ def fetch_npm_version(package: str) -> str:
 
 # Parse versions into numeric components for proper comparison
 # Handle versions like "1.0.105", "0.61.0", "2025.11.06-8fe8a63", "v1.0.0"
-def parse_version(v: str) -> tuple[list[int], str]:
-    """Parse version into numeric parts and suffix."""
+def parse_version(v: str) -> tuple[list[int], list[str]]:
+    """Parse numeric release components and prerelease identifiers."""
     # Strip 'v' prefix if present
     v = v.lstrip("v")
 
-    # Split on common separators (-, +, etc) to separate numeric from suffix
-    parts = v.replace("+", "-").split("-", 1)
+    # Build metadata does not affect version precedence.
+    precedence = v.split("+", 1)[0]
+    parts = precedence.split("-", 1)
     numeric_str = parts[0]
-    suffix = parts[1] if len(parts) > 1 else ""
+    prerelease = parts[1].split(".") if len(parts) > 1 else []
 
     # Parse numeric components
     try:
@@ -73,7 +74,7 @@ def parse_version(v: str) -> tuple[list[int], str]:
         # Fallback to lexicographic if not numeric
         numeric = []
 
-    return (numeric, suffix)
+    return (numeric, prerelease)
 
 
 def compare_versions(v1: str, v2: str) -> int:
@@ -90,8 +91,8 @@ def compare_versions(v1: str, v2: str) -> int:
     if v1 == v2:
         return 0
 
-    v1_numeric, v1_suffix = parse_version(v1)
-    v2_numeric, v2_suffix = parse_version(v2)
+    v1_numeric, v1_prerelease = parse_version(v1)
+    v2_numeric, v2_prerelease = parse_version(v2)
 
     # If parsing failed for either, fall back to lexicographic
     if not v1_numeric or not v2_numeric:
@@ -106,15 +107,27 @@ def compare_versions(v1: str, v2: str) -> int:
         if n1 > n2:
             return 1
 
-    # Numeric parts are equal, compare suffix lexicographically
-    # No suffix is considered "greater" than having a suffix (1.0.0 > 1.0.0-beta)
-    if v1_suffix == v2_suffix:
+    # A stable release sorts after a prerelease with the same numeric version.
+    if v1_prerelease == v2_prerelease:
         return 0
-    if not v1_suffix:
+    if not v1_prerelease:
         return 1
-    if not v2_suffix:
+    if not v2_prerelease:
         return -1
-    return -1 if v1_suffix < v2_suffix else 1
+
+    for identifier1, identifier2 in zip(v1_prerelease, v2_prerelease, strict=False):
+        if identifier1 == identifier2:
+            continue
+
+        numeric1 = identifier1.isdigit()
+        numeric2 = identifier2.isdigit()
+        if numeric1 and numeric2:
+            return -1 if int(identifier1) < int(identifier2) else 1
+        if numeric1 != numeric2:
+            return -1 if numeric1 else 1
+        return -1 if identifier1 < identifier2 else 1
+
+    return -1 if len(v1_prerelease) < len(v2_prerelease) else 1
 
 
 def should_update(current: str, latest: str) -> bool:
