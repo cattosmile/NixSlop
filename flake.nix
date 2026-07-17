@@ -1,6 +1,13 @@
 {
   description = "NixSlop - fast-moving app packages for NixOS";
 
+  nixConfig = {
+    extra-substituters = [ "https://nixslop.cachix.org?priority=30" ];
+    extra-trusted-public-keys = [
+      "nixslop.cachix.org-1:Y41flUqIXb+Qx7D6hiugUE17RG4EkLaBn3UlVXc1oE8="
+    ];
+  };
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     systems.url = "github:nix-systems/default-linux";
