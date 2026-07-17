@@ -46,6 +46,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Test updater helpers
+        run: python3 -m unittest discover -s tests -v
+
       - name: Prepare update branch
         env:
           BRANCH: update/packages
@@ -109,12 +112,17 @@ jobs:
             opencode_version="$(nix eval .#opencode.version --raw)"
             omx_version="$(nix eval .#oh-my-codex.version --raw)"
 
-            git add \
-              packages/codex/hashes.json \
-              packages/kimi-code/hashes.json \
-              packages/oh-my-codex/hashes.json \
-              packages/oh-my-codex/Cargo.lock \
-              flake.lock
+            while IFS= read -r file; do
+              case "$file" in
+                flake.lock|packages/*/hashes.json|packages/*/Cargo.lock)
+                  git add -- "$file"
+                  ;;
+                *)
+                  echo "::error::Updater changed unexpected file: $file"
+                  exit 1
+                  ;;
+              esac
+            done <<< "$changed_files"
 
             message="update package pins"
             title="codex: ${codex_version}, desktop: ${codex_desktop_version}, kimi: ${kimi_version}, opencode: ${opencode_version}, omx: ${omx_version}"

@@ -96,6 +96,7 @@ binary cache.
 Enable with:
 
 ```nix
+imports = [ inputs.nixslop.homeManagerModules.kimiCode ];
 programs.kimiCode.enable = true;
 ```
 
@@ -107,6 +108,7 @@ command without delegating installation or upgrades to an imperative installer.
 Enable with:
 
 ```nix
+imports = [ inputs.nixslop.homeManagerModules.codexOmx ];
 programs.codexOmx.enable = true;
 ```
 
@@ -123,5 +125,7 @@ Purpose: install Codex CLI and OMX as one managed bundle, then keep OMX plugin s
 5. builds and smoke-tests Codex CLI, Codex Desktop, Kimi Code, OpenCode, and OMX,
 6. publishes their signed runtime closures to `nixslop.cachix.org`, and
 7. commits changed pins to an update branch and maintains an auto-merge PR.
+
+`.github/workflows/check.yml` is the read-only safety net for normal changes. Every pull request and push to `main` runs the updater unit tests, evaluates all packages and Home Manager module contracts, then builds and smoke-tests each supported app.
 
 Future apps should follow the same pattern: package the latest upstream release in NixSlop, expose a focused Home Manager module option, document only that option-based interface here, and let automation refresh pins.

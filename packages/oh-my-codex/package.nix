@@ -83,14 +83,16 @@ buildNpmPackage {
         --replace-fail 'async function applyTeamModeToPluginCache' \
           'async function makePluginCacheWritable(cacheDir: string): Promise<void> {
       async function visit(dir: string): Promise<void> {
-        await chmod(dir, 0o755).catch(() => undefined);
-        const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+        const dirStats = await lstat(dir);
+        await chmod(dir, dirStats.mode | 0o200);
+        const entries = await readdir(dir, { withFileTypes: true });
         for (const entry of entries) {
           const path = join(dir, entry.name);
           if (entry.isDirectory()) {
             await visit(path);
-          } else {
-            await chmod(path, 0o644).catch(() => undefined);
+          } else if (entry.isFile()) {
+            const fileStats = await lstat(path);
+            await chmod(path, fileStats.mode | 0o200);
           }
         }
       }
@@ -114,6 +116,9 @@ buildNpmPackage {
       echo "could not find packaged OMX plugin cache copy target in src/cli/plugin-marketplace.ts" >&2
       exit 1
     fi
+
+    grep -Fq 'fileStats.mode | 0o200' src/cli/plugin-marketplace.ts \
+      || { echo "OMX cache patch does not preserve executable bits" >&2; exit 1; }
   '';
 
   postInstall = ''

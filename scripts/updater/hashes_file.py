@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
+from .files import atomic_write_text
+
 
 def load_hashes(path: Path) -> dict[str, Any]:
     """Load hashes.json file.
@@ -26,4 +28,4 @@ def save_hashes(path: Path, data: dict[str, Any]) -> None:
         data: Dictionary to save
 
     """
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    atomic_write_text(path, json.dumps(data, indent=2) + "\n")

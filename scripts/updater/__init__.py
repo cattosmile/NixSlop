@@ -14,6 +14,9 @@ from .bun import (
 # Dependency hash calculation
 from .deps import calculate_dependency_hash
 
+# Safe file updates
+from .files import atomic_write_text, file_transaction
+
 # Hash utilities
 from .hash import calculate_url_hash
 
@@ -46,6 +49,7 @@ from .version import (
 
 __all__ = [
     "NixCommandError",
+    "atomic_write_text",
     "calculate_dependency_hash",
     "calculate_platform_hashes",
     "calculate_url_hash",
@@ -56,6 +60,7 @@ __all__ = [
     "fetch_npm_version",
     "fetch_text",
     "fetch_version_from_text",
+    "file_transaction",
     "load_hashes",
     "nix_build",
     "nix_eval",

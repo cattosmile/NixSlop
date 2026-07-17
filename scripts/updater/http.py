@@ -2,6 +2,8 @@
 
 import json
 import os
+import time
+import urllib.error
 import urllib.request
 from typing import Any
 
@@ -24,7 +26,12 @@ DEFAULT_USER_AGENT = "llm-agents-updater"
 
 
 def fetch_text(
-    url: str, *, timeout: int = 30, user_agent: str = DEFAULT_USER_AGENT
+    url: str,
+    *,
+    timeout: int = 30,
+    user_agent: str = DEFAULT_USER_AGENT,
+    retries: int = 3,
+    retry_backoff: float = 1.0,
 ) -> str:
     """Fetch text content from a URL.
 
@@ -32,6 +39,8 @@ def fetch_text(
         url: URL to fetch
         timeout: Request timeout in seconds
         user_agent: User-Agent header value
+        retries: Total number of attempts for transient network failures
+        retry_backoff: Initial retry delay in seconds, doubled after each failure
 
     Returns:
         Response body as text
@@ -40,14 +49,34 @@ def fetch_text(
         urllib.error.URLError: If the request fails
 
     """
-    if "api.github.com" in url:
-        req = _github_request(url)
-    else:
-        req = urllib.request.Request(url)
-    req.add_header("User-Agent", user_agent)
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        data: bytes = response.read()
-        return data.decode("utf-8")
+    if retries < 1:
+        msg = "retries must be at least 1"
+        raise ValueError(msg)
+
+    for attempt in range(retries):
+        if "api.github.com" in url:
+            req = _github_request(url)
+        else:
+            req = urllib.request.Request(url)
+        req.add_header("User-Agent", user_agent)
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                data: bytes = response.read()
+                return data.decode("utf-8")
+        except urllib.error.HTTPError as error:
+            transient_statuses = {408, 425, 429}
+            if error.code not in transient_statuses and error.code < 500:
+                raise
+            if attempt == retries - 1:
+                raise
+            time.sleep(retry_backoff * (2**attempt))
+        except (TimeoutError, urllib.error.URLError):
+            if attempt == retries - 1:
+                raise
+            time.sleep(retry_backoff * (2**attempt))
+
+    raise AssertionError("retry loop exited unexpectedly")
 
 
 def fetch_json(url: str, *, timeout: int = 30) -> dict[str, Any] | list[Any]:

@@ -20,6 +20,7 @@ from updater import (
     calculate_url_hash,
     fetch_github_latest_release,
     fetch_version_from_text,
+    file_transaction,
     load_hashes,
     save_hashes,
     should_update,
@@ -135,24 +136,26 @@ def main() -> None:
     print("Calculating source hash...")
     source_hash = calculate_url_hash(url, unpack=True)
 
-    data = {
+    updated_data = {
         "version": latest,
         "hash": source_hash,
         "cargoHash": DUMMY_SHA256_HASH,
         "librusty_v8": librusty_v8_pins(latest, data.get("librusty_v8")),
         "livekit_webrtc": livekit_webrtc_pins(latest, data.get("livekit_webrtc")),
     }
-    save_hashes(HASHES_FILE, data)
 
-    try:
-        cargo_hash = calculate_dependency_hash(
-            ".#codex", "cargoHash", HASHES_FILE, data
-        )
-        data["cargoHash"] = cargo_hash
-        save_hashes(HASHES_FILE, data)
-    except (ValueError, NixCommandError) as e:
-        print(f"Error: {e}")
-        raise SystemExit(1) from e
+    with file_transaction(HASHES_FILE):
+        save_hashes(HASHES_FILE, updated_data)
+
+        try:
+            cargo_hash = calculate_dependency_hash(
+                ".#codex", "cargoHash", HASHES_FILE, updated_data
+            )
+            updated_data["cargoHash"] = cargo_hash
+            save_hashes(HASHES_FILE, updated_data)
+        except (ValueError, NixCommandError) as e:
+            print(f"Error: {e}")
+            raise SystemExit(1) from e
 
     print(f"Updated to {latest}")
 

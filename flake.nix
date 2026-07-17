@@ -176,12 +176,32 @@
 
                 if ! grep -Fq "$expected_source" "$config_file" 2>/dev/null \
                   || ! grep -R -Fq "$expected_command" "$cache_base" 2>/dev/null; then
-                  ${omxPackage}/bin/omx setup --plugin --force --scope user
+                  ${pkgs.coreutils}/bin/env \
+                    --unset=OMX_ROOT \
+                    --unset=OMX_STATE_ROOT \
+                    HOME="${config.home.homeDirectory}" \
+                    CODEX_HOME="${config.home.homeDirectory}/.codex" \
+                    ${omxPackage}/bin/omx setup --plugin --force --scope user
                 fi
               ''
             );
           };
         };
+
+      checks = eachSystem (
+        system:
+        let
+          pkgs = pkgsFor system;
+          moduleContracts = import ./tests/module-contracts.nix { inherit self pkgs; };
+        in
+        {
+          module-contracts =
+            assert moduleContracts;
+            pkgs.runCommand "nixslop-module-contracts" { } ''
+              touch $out
+            '';
+        }
+      );
 
       devShells = eachSystem (
         system:

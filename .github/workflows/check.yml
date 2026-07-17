@@ -1,0 +1,96 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Configure NixSlop binary cache
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: nixslop
+
+      - name: Test updater helpers
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Validate flake and module contracts
+        run: |
+          nix flake check --all-systems --no-build --print-build-logs
+          nix build --no-link .#checks.x86_64-linux.module-contracts
+
+  build:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - codex
+          - codex-desktop
+          - kimi-code
+          - opencode
+          - oh-my-codex
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Configure NixSlop binary cache
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: nixslop
+
+      - name: Build and smoke test ${{ matrix.package }}
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          package_path="$(nix build --no-link --print-out-paths ".#$PACKAGE" --print-build-logs)"
+
+          case "$PACKAGE" in
+            codex)
+              "$package_path/bin/codex" --version
+              ;;
+            codex-desktop)
+              test -x "$package_path/bin/codex-desktop"
+              ;;
+            kimi-code)
+              "$package_path/bin/kimi" --version
+              ;;
+            opencode)
+              "$package_path/bin/opencode" --version
+              ;;
+            oh-my-codex)
+              "$package_path/bin/omx" --version
+              ;;
+          esac

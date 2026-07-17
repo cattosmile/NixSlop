@@ -14,10 +14,12 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
 
 from updater import (  # noqa: E402
+    atomic_write_text,
     calculate_dependency_hash,
     calculate_url_hash,
     fetch_npm_version,
     fetch_text,
+    file_transaction,
     load_hashes,
     save_hashes,
     should_update,
@@ -41,35 +43,37 @@ def main() -> None:
         print("Already up to date")
         return
 
-    url = f"https://github.com/Yeachan-Heo/oh-my-codex/archive/refs/tags/v{latest}.tar.gz"
+    url = (
+        f"https://github.com/Yeachan-Heo/oh-my-codex/archive/refs/tags/v{latest}.tar.gz"
+    )
 
     print("Calculating source hash...")
     source_hash = calculate_url_hash(url, unpack=True)
 
-    print("Refreshing Cargo.lock...")
+    print("Fetching Cargo.lock...")
     cargo_lock = fetch_text(
         f"https://raw.githubusercontent.com/Yeachan-Heo/oh-my-codex/v{latest}/Cargo.lock"
     )
-    if CARGO_LOCK_FILE.exists():
-        CARGO_LOCK_FILE.chmod(0o644)
-    CARGO_LOCK_FILE.write_text(cargo_lock)
 
-    data = {
+    updated_data = {
         "version": latest,
         "hash": source_hash,
         "npmDepsHash": DUMMY_SHA256_HASH,
     }
-    save_hashes(HASHES_FILE, data)
 
-    try:
-        npm_deps_hash = calculate_dependency_hash(
-            ".#oh-my-codex", "npmDepsHash", HASHES_FILE, data
-        )
-        data["npmDepsHash"] = npm_deps_hash
-        save_hashes(HASHES_FILE, data)
-    except (ValueError, NixCommandError) as e:
-        print(f"Error: {e}")
-        raise SystemExit(1) from e
+    with file_transaction(HASHES_FILE, CARGO_LOCK_FILE):
+        atomic_write_text(CARGO_LOCK_FILE, cargo_lock)
+        save_hashes(HASHES_FILE, updated_data)
+
+        try:
+            npm_deps_hash = calculate_dependency_hash(
+                ".#oh-my-codex", "npmDepsHash", HASHES_FILE, updated_data
+            )
+            updated_data["npmDepsHash"] = npm_deps_hash
+            save_hashes(HASHES_FILE, updated_data)
+        except (ValueError, NixCommandError) as e:
+            print(f"Error: {e}")
+            raise SystemExit(1) from e
 
     print(f"Updated oh-my-codex to {latest}")
 
