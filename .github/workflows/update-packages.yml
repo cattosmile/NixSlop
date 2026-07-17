@@ -2,10 +2,10 @@ name: Update Packages
 
 on:
   schedule:
-    # GitHub Actions schedules are UTC. Run 4x/day instead of hourly so
-    # transient upstream release churn has time to settle, while still keeping
-    # fast-moving app pins fresh.
-    - cron: '17 0,6,12,18 * * *'
+    # GitHub Actions schedules are UTC. Run once per day because a full Codex
+    # and OMX build takes about an hour and more frequent runs provide little
+    # value for this personal binary cache.
+    - cron: '17 3 * * *'
   workflow_dispatch:
 
 defaults:
@@ -25,15 +25,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
 
       - name: Install Nix
-        uses: cachix/install-nix-action@v31
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+
+      - name: Configure NixSlop binary cache
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: nixslop
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Configure git author
         run: |
@@ -68,8 +74,15 @@ jobs:
       - name: Validate flake evaluation
         run: nix flake check --all-systems --no-build --print-build-logs
 
-      - name: Build OMX package smoke
-        run: nix build .#oh-my-codex --print-build-logs
+      - name: Build and smoke test cached packages
+        run: |
+          codex_path="$(nix build --no-link --print-out-paths .#codex --print-build-logs)"
+          omx_path="$(nix build --no-link --print-out-paths .#oh-my-codex --print-build-logs)"
+
+          test -x "$codex_path/bin/codex"
+          test -x "$omx_path/bin/omx"
+          "$codex_path/bin/codex" --version
+          "$omx_path/bin/omx" --version
 
       - name: Create or update package update PR
         env:
@@ -119,7 +132,12 @@ jobs:
 
           Validated in this workflow:
           - nix flake check --all-systems --no-build --print-build-logs
-          - nix build .#oh-my-codex --print-build-logs
+          - nix build .#codex .#oh-my-codex --print-build-logs
+          - codex --version
+          - omx --version
+
+          Binary cache:
+          - https://nixslop.cachix.org
 
           Current evaluated versions:
           - codex: ${codex_version}
