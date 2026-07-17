@@ -30,6 +30,7 @@ stdenv.mkDerivation {
   pname = "kimi-code";
   inherit version src;
 
+  strictDeps = true;
   dontUnpack = true;
   # The release binary embeds a Node SEA blob. Stripping rewrites ELF metadata
   # used by the embedded payload and makes the executable crash at startup.
