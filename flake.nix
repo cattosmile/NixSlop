@@ -39,9 +39,38 @@
         in
         {
           inherit codex;
+          kimi-code = pkgs.callPackage ./packages/kimi-code/package.nix { };
           oh-my-codex = pkgs.callPackage ./packages/oh-my-codex/package.nix { inherit codex; };
         }
       );
+
+      homeManagerModules.kimiCode =
+        {
+          config,
+          lib,
+          pkgs,
+          ...
+        }:
+        let
+          cfg = config.programs.kimiCode;
+          system = pkgs.stdenv.hostPlatform.system;
+        in
+        {
+          options.programs.kimiCode = {
+            enable = lib.mkEnableOption "Kimi Code CLI";
+
+            package = lib.mkOption {
+              type = lib.types.package;
+              default = self.packages.${system}.kimi-code;
+              defaultText = lib.literalExpression "inputs.nixslop.packages.${pkgs.stdenv.hostPlatform.system}.kimi-code";
+              description = "Kimi Code CLI package to install.";
+            };
+          };
+
+          config = lib.mkIf cfg.enable {
+            home.packages = [ cfg.package ];
+          };
+        };
 
       homeManagerModules.codexOmx =
         {
