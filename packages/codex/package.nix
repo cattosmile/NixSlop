@@ -32,12 +32,17 @@ let
   # build.rs would download a ~300MB prebuilt libwebrtc archive at build
   # time. Prefetch it as a fixed-output derivation and point the crate at
   # it via LK_CUSTOM_WEBRTC so the build stays sandboxed.
+  # Note: codex removed the realtime-webrtc crate in rust-v0.145.0, so
+  # versionData.livekit_webrtc may be absent entirely.
   livekitWebrtcTriple =
-    {
-      x86_64-darwin = "mac-x64";
-      aarch64-darwin = "mac-arm64";
-    }
-    .${stdenv.hostPlatform.system} or null;
+    if versionData ? livekit_webrtc then
+      {
+        x86_64-darwin = "mac-x64";
+        aarch64-darwin = "mac-arm64";
+      }
+      .${stdenv.hostPlatform.system} or null
+    else
+      null;
   livekitWebrtc =
     if livekitWebrtcTriple == null then
       null
