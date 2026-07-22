@@ -82,20 +82,27 @@ jobs:
 
       - name: Build and smoke test cached packages
         run: |
+          # GitHub-hosted runners have ~14 GB of free disk. The full Codex
+          # release build consumes most of that in its target directory, so
+          # building all packages in parallel exhausts the disk. Build them
+          # sequentially and let the smoke tests validate each result.
           codex_path="$(nix build --no-link --print-out-paths .#codex --print-build-logs)"
-          codex_desktop_path="$(nix build --no-link --print-out-paths .#codex-desktop --print-build-logs)"
-          kimi_path="$(nix build --no-link --print-out-paths .#kimi-code --print-build-logs)"
-          opencode_path="$(nix build --no-link --print-out-paths .#opencode --print-build-logs)"
-          omx_path="$(nix build --no-link --print-out-paths .#oh-my-codex --print-build-logs)"
-
           test -x "$codex_path/bin/codex"
-          test -x "$codex_desktop_path/bin/codex-desktop"
-          test -x "$kimi_path/bin/kimi"
-          test -x "$opencode_path/bin/opencode"
-          test -x "$omx_path/bin/omx"
           "$codex_path/bin/codex" --version
+
+          codex_desktop_path="$(nix build --no-link --print-out-paths .#codex-desktop --print-build-logs)"
+          test -x "$codex_desktop_path/bin/codex-desktop"
+
+          kimi_path="$(nix build --no-link --print-out-paths .#kimi-code --print-build-logs)"
+          test -x "$kimi_path/bin/kimi"
           "$kimi_path/bin/kimi" --version
+
+          opencode_path="$(nix build --no-link --print-out-paths .#opencode --print-build-logs)"
+          test -x "$opencode_path/bin/opencode"
           "$opencode_path/bin/opencode" --version
+
+          omx_path="$(nix build --no-link --print-out-paths .#oh-my-codex --print-build-logs)"
+          test -x "$omx_path/bin/omx"
           "$omx_path/bin/omx" --version
 
       - name: Create or update package update PR
