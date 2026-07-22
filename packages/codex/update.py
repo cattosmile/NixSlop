@@ -84,19 +84,26 @@ def librusty_v8_pins(
 
 def livekit_webrtc_pins(
     codex_version: str, previous: dict[str, Any] | None
-) -> dict[str, Any]:
+) -> dict[str, Any] | None:
     """Return the prebuilt livekit webrtc pin for the given codex version.
 
     codex pins a fork of livekit/rust-sdks via a git revision; that crate's
     ``webrtc-sys-build`` hard-codes the upstream release tag to download.
     Re-uses existing hashes when the tag is unchanged to avoid re-downloading
     two ~300MB archives on every bump.
+
+    Returns ``None`` when the crate has been removed from the codex
+    repository (as happened in rust-v0.145.0).
     """
-    rust_sdks_rev = fetch_version_from_text(
-        f"https://raw.githubusercontent.com/openai/codex/rust-v{codex_version}/codex-rs/Cargo.lock",
-        r'name = "webrtc-sys-build"\nversion = "[^"]+"\n'
-        r'source = "git\+https://github\.com/[^?]+\?rev=([0-9a-f]+)',
-    )
+    try:
+        rust_sdks_rev = fetch_version_from_text(
+            f"https://raw.githubusercontent.com/openai/codex/rust-v{codex_version}/codex-rs/Cargo.lock",
+            r'name = "webrtc-sys-build"\nversion = "[^"]+"\n'
+            r'source = "git\+https://github\.com/[^?]+\?rev=([0-9a-f]+)',
+        )
+    except ValueError:
+        print("webrtc-sys-build not found in Cargo.lock, skipping livekit webrtc pin")
+        return None
     webrtc_tag = fetch_version_from_text(
         f"https://raw.githubusercontent.com/juberti-oai/rust-sdks/{rust_sdks_rev}/webrtc-sys/build/src/lib.rs",
         r'WEBRTC_TAG: &str = "([^"]+)"',
@@ -143,6 +150,8 @@ def main() -> None:
         "librusty_v8": librusty_v8_pins(latest, data.get("librusty_v8")),
         "livekit_webrtc": livekit_webrtc_pins(latest, data.get("livekit_webrtc")),
     }
+    if updated_data["livekit_webrtc"] is None:
+        del updated_data["livekit_webrtc"]
 
     with file_transaction(HASHES_FILE):
         save_hashes(HASHES_FILE, updated_data)
