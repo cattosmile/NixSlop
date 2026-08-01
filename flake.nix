@@ -40,10 +40,85 @@
         in
         let
           codex = pkgs.callPackage ./packages/codex/package.nix { };
+          upstreamCodexDesktop = codex-desktop-linux.packages.${system}.codex-desktop;
+          computerUseSource = pkgs.runCommandLocal "nixslop-computer-use-linux-source" {
+            nativeBuildInputs = [ pkgs.patch ];
+          } ''
+            mkdir -p "$out"
+            cp ${codex-desktop-linux}/Cargo.lock "$out/Cargo.lock"
+            cat > "$out/Cargo.toml" <<'EOF'
+            [workspace]
+            members = ["computer-use-linux"]
+            resolver = "2"
+            EOF
+            cp -R ${codex-desktop-linux}/computer-use-linux "$out/computer-use-linux"
+            chmod -R u+w "$out"
+            patch -d "$out" -p1 < ${./packages/codex-desktop/computer-use.patch}
+          '';
+          computerUseBinaries = pkgs.rustPlatform.buildRustPackage {
+            pname = "nixslop-codex-computer-use-linux-binaries";
+            version = "0.1.2-linux-alpha2";
+            src = computerUseSource;
+
+            cargoLock = {
+              lockFile = "${codex-desktop-linux}/Cargo.lock";
+            };
+
+            buildAndTestSubdir = "computer-use-linux";
+            cargoBuildFlags = [
+              "-p"
+              "codex-computer-use-linux"
+              "--bins"
+            ];
+            doCheck = false;
+
+            installPhase = ''
+              runHook preInstall
+              release_dir="target/''${CARGO_BUILD_TARGET:-${pkgs.stdenv.hostPlatform.rust.rustcTarget}}/release"
+              if [ ! -d "$release_dir" ]; then
+                release_dir="target/release"
+              fi
+              install -Dm0755 "$release_dir/codex-computer-use-linux" "$out/bin/codex-computer-use-linux"
+              install -Dm0755 "$release_dir/codex-computer-use-cosmic" "$out/bin/codex-computer-use-cosmic"
+              install -Dm0755 "$release_dir/codex-chrome-extension-host" "$out/bin/codex-chrome-extension-host"
+              runHook postInstall
+            '';
+          };
+          customizeCodexDesktop = package: package.overrideAttrs (old: {
+            postInstall = (old.postInstall or "") + ''
+              plugin_dir="$out/opt/codex-desktop/resources/plugins/openai-bundled/plugins/computer-use"
+              test -f "$plugin_dir/assets/app-icon.png"
+              install -Dm0644 ${./packages/codex-desktop/computer-use-plugin.json} "$plugin_dir/.codex-plugin/plugin.json"
+              install -Dm0755 ${computerUseBinaries}/bin/codex-computer-use-linux "$plugin_dir/bin/codex-computer-use-linux"
+              install -Dm0755 ${computerUseBinaries}/bin/codex-computer-use-cosmic "$plugin_dir/bin/codex-computer-use-cosmic"
+              install -Dm0755 ${computerUseBinaries}/bin/codex-chrome-extension-host "$plugin_dir/bin/codex-chrome-extension-host"
+            '';
+          });
+          codexDesktop = pkgs.lib.makeOverridable (
+            {
+              enableComputerUseUi ? false,
+              linuxFeatureIds ? [ ],
+              linuxFeaturesConfigOverride ? null,
+            }:
+            customizeCodexDesktop (
+              upstreamCodexDesktop.override {
+                inherit enableComputerUseUi linuxFeatureIds linuxFeaturesConfigOverride;
+              }
+            )
+          ) { };
         in
         {
           inherit codex;
-          codex-desktop = codex-desktop-linux.packages.${system}.codex-desktop;
+          codex-computer-use-linux = computerUseBinaries;
+          codex-desktop = codexDesktop;
+          codex-desktop-computer-use-ui = codexDesktop.override { enableComputerUseUi = true; };
+          codex-desktop-remote-mobile-control = codexDesktop.override {
+            linuxFeatureIds = [ "remote-mobile-control" ];
+          };
+          codex-desktop-computer-use-ui-remote-mobile-control = codexDesktop.override {
+            enableComputerUseUi = true;
+            linuxFeatureIds = [ "remote-mobile-control" ];
+          };
           kimi-code = pkgs.callPackage ./packages/kimi-code/package.nix { };
           opencode = opencode.packages.${system}.opencode;
           oh-my-codex = pkgs.callPackage ./packages/oh-my-codex/package.nix { inherit codex; };
@@ -80,17 +155,26 @@
 
       homeManagerModules.codexDesktop =
         {
+          config,
           lib,
           pkgs,
           ...
         }:
         let
+          cfg = config.programs.codexDesktopLinux;
           system = pkgs.stdenv.hostPlatform.system;
+          defaultPackage = self.packages.${system}.codex-desktop.override {
+            enableComputerUseUi = cfg.computerUseUi.enable;
+            linuxFeatureIds = cfg.linuxFeatures ++ lib.optional cfg.remoteMobileControl.enable "remote-mobile-control";
+          };
         in
         {
           imports = [ codex-desktop-linux.homeManagerModules.default ];
 
-          programs.codexDesktopLinux.cliPackage = lib.mkDefault self.packages.${system}.codex;
+          programs.codexDesktopLinux = {
+            cliPackage = lib.mkDefault self.packages.${system}.codex;
+            package = lib.mkDefault defaultPackage;
+          };
         };
 
       homeManagerModules.kimiCode =
@@ -188,11 +272,17 @@
           };
         };
 
+      nixosModules = rec {
+        default = codexComputerUse;
+        codexComputerUse = import ./nix/nixos-module.nix;
+      };
+
       checks = eachSystem (
         system:
         let
           pkgs = pkgsFor system;
           moduleContracts = import ./tests/module-contracts.nix { inherit self pkgs; };
+          codexDesktopComputerUse = self.packages.${system}.codex-desktop;
         in
         {
           module-contracts =
@@ -200,6 +290,22 @@
             pkgs.runCommand "nixslop-module-contracts" { } ''
               touch $out
             '';
+
+          codex-desktop-computer-use = pkgs.runCommand "nixslop-codex-desktop-computer-use" { } ''
+            plugin="${codexDesktopComputerUse}/opt/codex-desktop/resources/plugins/openai-bundled/plugins/computer-use"
+            test -f "$plugin/.codex-plugin/plugin.json"
+            test -x "$plugin/bin/codex-computer-use-linux"
+            test -x "$plugin/bin/codex-computer-use-cosmic"
+            test -x "$plugin/bin/codex-chrome-extension-host"
+            grep -Fq '"hyprland"' "$plugin/.codex-plugin/plugin.json"
+            grep -Fq '"grim"' "$plugin/.codex-plugin/plugin.json"
+            grep -Fq '"ydotool"' "$plugin/.codex-plugin/plugin.json"
+            if grep -Fq '"gnome"' "$plugin/.codex-plugin/plugin.json"; then
+              echo "unexpected GNOME keyword in the packaged Computer Use plugin" >&2
+              exit 1
+            fi
+            touch $out
+          '';
         }
       );
 

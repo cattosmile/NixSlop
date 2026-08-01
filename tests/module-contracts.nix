@@ -30,6 +30,19 @@ let
   };
 
   codexDesktop = self.homeManagerModules.codexDesktop {
+    config.programs.codexDesktopLinux = {
+      computerUseUi.enable = false;
+      remoteMobileControl.enable = false;
+      linuxFeatures = [ ];
+    };
+    inherit lib pkgs;
+  };
+
+  codexComputerUse = self.nixosModules.codexComputerUse {
+    config.services.codexComputerUse = {
+      enable = true;
+      user = "module-test";
+    };
     inherit lib pkgs;
   };
 
@@ -59,8 +72,18 @@ assert builtins.hasAttr "package" kimiCode.options.programs.kimiCode;
 assert packagePaths kimiCodeConfig.home.packages == [ self.packages.${system}.kimi-code.outPath ];
 assert builtins.length codexDesktop.imports == 1;
 assert
+  codexDesktop.programs.codexDesktopLinux.package.content.outPath
+  == self.packages.${system}.codex-desktop.outPath;
+assert
   codexDesktop.programs.codexDesktopLinux.cliPackage.content.outPath
   == self.packages.${system}.codex.outPath;
+assert codexComputerUse.config.condition;
+assert codexComputerUse.config.content.services.gnome.at-spi2-core.enable;
+assert codexComputerUse.config.content.programs.ydotool.enable;
+assert codexComputerUse.config.content.users.users.condition;
+assert
+  codexComputerUse.config.content.users.users.content."module-test".extraGroups.content
+  == [ "ydotool" ];
 assert codexOmx.config.condition;
 assert
   packagePaths codexOmxConfig.home.packages == packagePaths [

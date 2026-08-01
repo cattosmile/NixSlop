@@ -92,6 +92,7 @@ jobs:
 
           codex_desktop_path="$(nix build --no-link --print-out-paths .#codex-desktop --print-build-logs)"
           test -x "$codex_desktop_path/bin/codex-desktop"
+          nix build --no-link .#checks.x86_64-linux.codex-desktop-computer-use --print-build-logs
 
           kimi_path="$(nix build --no-link --print-out-paths .#kimi-code --print-build-logs)"
           test -x "$kimi_path/bin/kimi"

@@ -38,6 +38,27 @@ inputs.nixslop.url = "github:cattosmile/NixSlop";
 }
 ```
 
+The default package includes the Hyprland-compatible Computer Use plugin and
+its native Linux backend. The system-side accessibility and input services
+can be enabled through the companion NixOS module:
+
+### NixOS Computer Use runtime
+
+```nix
+{
+  imports = [ inputs.nixslop.nixosModules.codexComputerUse ];
+
+  services.codexComputerUse = {
+    enable = true;
+    user = "user";
+  };
+}
+```
+
+This enables AT-SPI2 and ydotool without enabling GNOME Shell or requiring a
+GNOME session. Set `user = null` when ydotool group membership is managed
+elsewhere.
+
 ### Kimi Code
 
 ```nix
