@@ -61,18 +61,16 @@ elsewhere.
 
 ### Hyprland ydotool keyboard mapping
 
-`ydotool type` emits US physical keycodes. On Hyprland, keep the virtual
-ydotool keyboard on an isolated US keymap while leaving physical keyboards on
-their normal layout:
+When `programs.codexDesktopLinux.enable = true` and Hyprland is enabled with
+Lua configuration, the `codexDesktop` Home Manager module automatically keeps
+the virtual ydotool keyboard on an isolated US keymap. Physical keyboards keep
+their normal layout. The generated Lua contains a separate `hl.device({...})`
+call for `ydotoold-virtual-device`.
+
+The automatic integration can be disabled explicitly:
 
 ```nix
-wayland.windowManager.hyprland.settings.config.device = {
-  "ydotoold-virtual-device" = {
-    kb_layout = "us";
-    kb_variant = "";
-    kb_options = "";
-  };
-};
+programs.codexComputerUseHyprland.enable = false;
 ```
 
 The packaged Computer Use backend uses the same US-mapped virtual device, so
