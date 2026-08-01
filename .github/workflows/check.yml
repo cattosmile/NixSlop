@@ -42,7 +42,10 @@ jobs:
       - name: Validate flake and module contracts
         run: |
           nix flake check --all-systems --no-build --print-build-logs
-          nix build --no-link .#checks.x86_64-linux.module-contracts
+          nix build --no-link \
+            .#checks.x86_64-linux.module-contracts \
+            .#checks.x86_64-linux.codex-desktop-computer-use \
+            --print-build-logs
 
   build:
     needs: validate
