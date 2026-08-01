@@ -981,19 +981,18 @@
          if let Some(note) = off_screen_note {
              caption["window_off_screen"] = serde_json::json!(true);
              caption["off_screen_note"] = serde_json::json!(note);
-@@ -1131,12 +1154,13 @@
+@@ -1131,12 +1154,12 @@
                  });
              }
          };
 -        let Some(key_events) = key_sequence(&params.key) else {
-+        let german_layout = crate::windowing::backends::hyprland::uses_german_layout();
-+        let Some(key_events) = key_sequence_for_layout(&params.key, german_layout) else {
++        let Some(key_events) = key_sequence(&params.key) else {
              return Json(ActionOutput {
                  ok: false,
                  implemented: true,
                  action: "press_key".to_string(),
 -                message: "Unsupported key. Use names like Enter, Escape, Tab, ArrowLeft, Super, Ctrl+L, or a single US keyboard letter/digit.".to_string(),
-+                message: "Unsupported key. Use names like Enter, Escape, Tab, ArrowLeft, Super, Ctrl+L, or a single layout-aware keyboard letter/digit.".to_string(),
++                message: "Unsupported key. Use names like Enter, Escape, Tab, ArrowLeft, Super, Ctrl+L, or a single US keyboard letter/digit.".to_string(),
                  received,
              });
          };
@@ -1064,7 +1063,7 @@
      // build if it drifts from the Cargo version.
      version = "0.3.1-linux-alpha1",
 -    instructions = "Begin every turn that uses Computer Use by calling get_app_state. If diagnostics report disabled GNOME accessibility, call setup_accessibility before asking the user to retry. Use list_windows/focused_window before targeted keyboard input. If diagnostics report windowing.can_list_windows=false on GNOME, call setup_window_targeting to install the optional GNOME Shell extension backend, then ask the user to log out and back in if the setup report says a shell reload is required. This Linux backend can capture size-bounded screenshots through GNOME Shell, the Codex GNOME Shell extension, or XDG Desktop Portal, read AT-SPI trees with action/value metadata, invoke native AT-SPI actions, set AT-SPI values or editable text, list/focus compositor windows through registered Linux window backends when the session permits it, attach best-effort terminal tty/process metadata to terminal windows, send coordinate or element-targeted click/scroll/drag input through the Wayland remote desktop portal when available, and send layout-safe literal type_text through KDE clipboard integration on Plasma Wayland or through portal keysyms on other Wayland sessions before falling back to ydotool. Screenshot results include width/height for the returned image plus coordinate_width/coordinate_height and scale for desktop coordinate conversion; request more detail with max_width, max_height, max_bytes, format=jpeg, quality, or a smaller target/crop instead of relying on unbounded screenshots. Tools with readOnlyHint=false may mutate local desktop or application state; hosts should require approval for actions that can submit, delete, send, purchase, or overwrite data. For element-targeted actions, prefer element_index from the latest get_app_state result; click, perform_action, and set_value can also use semantic role/name/text/states selectors when the target is unique. type_text and press_key accept optional window_id, pid, app_id, wm_class, title, tty, terminal_pid, terminal_command, or terminal_cwd selectors and refuse targeted input if focus cannot be verified. After targeted keyboard input, results append focused-element feedback from AT-SPI (role, name, editable) and warn when no editable element holds focus — treat that warning as the input not landing. Screenshot, click, and input results warn when the target window or coordinate is partially or fully off-screen; use move_window/resize_window (GNOME Shell extension backend) to bring a window fully on-screen before retrying. scroll accepts the same window targeting and relative coordinates as click. get_app_state returns a compact readiness block by default; pass verbose=true for the full diagnostics dump. Electron apps expose no AT-SPI tree unless launched with --force-renderer-accessibility."
-+    instructions = "Begin every turn that uses Computer Use by calling get_app_state. If diagnostics report unavailable AT-SPI, call setup_accessibility; on Hyprland this only checks the compositor-neutral accessibility bus and never installs GNOME components. Use list_windows/focused_window before targeted keyboard input. On Hyprland, native hyprctl window listing, focus, move, and resize are preferred and setup_window_targeting is a no-op. This Linux backend captures full-screen and explicit x/y/width/height areas through native grim on Wayland, with XDG Desktop Portal as a full-screen fallback; no GNOME screenshot command or screenshot environment variable is required. It reads AT-SPI trees with action/value metadata, invokes native AT-SPI actions, sets AT-SPI values or editable text, attaches best-effort terminal tty/process metadata to terminal windows, sends coordinate or element-targeted click/scroll/drag input through the Wayland remote desktop portal when available, and sends layout-aware literal text through the portal or the detected native keyboard layout before falling back to ydotool. Screenshot results include width/height for the returned image plus coordinate_width/coordinate_height and scale for desktop coordinate conversion; request more detail with max_width, max_height, max_bytes, format=jpeg, quality, or an explicit area instead of relying on unbounded screenshots. Tools with readOnlyHint=false may mutate local desktop or application state; hosts should require approval for actions that can submit, delete, send, purchase, or overwrite data. For element-targeted actions, prefer element_index from the latest get_app_state result; click, perform_action, and set_value can also use semantic role/name/text/states selectors when the target is unique. type_text and press_key accept optional window_id, pid, app_id, wm_class, title, tty, terminal_pid, terminal_command, or terminal_cwd selectors and refuse targeted input if focus cannot be verified. After targeted keyboard input, results append focused-element feedback from AT-SPI (role, name, editable) and warn when no editable element holds focus — treat that warning as the input not landing. Screenshot, click, and input results warn when the target window or coordinate is partially or fully off-screen; use move_window/resize_window to bring a window fully on-screen before retrying. scroll accepts the same window targeting and relative coordinates as click. get_app_state returns a compact readiness block by default; pass verbose=true for the full diagnostics dump. Electron apps expose no AT-SPI tree unless launched with --force-renderer-accessibility."
++    instructions = "Begin every turn that uses Computer Use by calling get_app_state. If diagnostics report unavailable AT-SPI, call setup_accessibility; on Hyprland this only checks the compositor-neutral accessibility bus and never installs GNOME components. Use list_windows/focused_window before targeted keyboard input. On Hyprland, native hyprctl window listing, focus, move, and resize are preferred and setup_window_targeting is a no-op. This Linux backend captures full-screen and explicit x/y/width/height areas through native grim on Wayland, with XDG Desktop Portal as a full-screen fallback; no GNOME screenshot command or screenshot environment variable is required. It reads AT-SPI trees with action/value metadata, invokes native AT-SPI actions, sets AT-SPI values or editable text, attaches best-effort terminal tty/process metadata to terminal windows, sends coordinate or element-targeted click/scroll/drag input through the Wayland remote desktop portal when available, and sends literal text through the portal or the dedicated US-mapped ydotool virtual keyboard before falling back to ydotool. The Hyprland ydotoold-virtual-device must use kb_layout=us so manual ydotool type commands and Computer Use share the same physical key mapping. Screenshot results include width/height for the returned image plus coordinate_width/coordinate_height and scale for desktop coordinate conversion; request more detail with max_width, max_height, max_bytes, format=jpeg, quality, or an explicit area instead of relying on unbounded screenshots. Tools with readOnlyHint=false may mutate local desktop or application state; hosts should require approval for actions that can submit, delete, send, purchase, or overwrite data. For element-targeted actions, prefer element_index from the latest get_app_state result; click, perform_action, and set_value can also use semantic role/name/text/states selectors when the target is unique. type_text and press_key accept optional window_id, pid, app_id, wm_class, title, tty, terminal_pid, terminal_command, or terminal_cwd selectors and refuse targeted input if focus cannot be verified. After targeted keyboard input, results append focused-element feedback from AT-SPI (role, name, editable) and warn when no editable element holds focus — treat that warning as the input not landing. Screenshot, click, and input results warn when the target window or coordinate is partially or fully off-screen; use move_window/resize_window to bring a window fully on-screen before retrying. scroll accepts the same window targeting and relative coordinates as click. get_app_state returns a compact readiness block by default; pass verbose=true for the full diagnostics dump. Electron apps expose no AT-SPI tree unless launched with --force-renderer-accessibility."
  )]
  impl ServerHandler for ComputerUseLinux {}
 
@@ -1196,20 +1195,11 @@
      command.args(args);
      if let Some(socket) = ydotool_socket() {
          command.env("YDOTOOL_SOCKET", socket);
-@@ -3487,7 +3545,18 @@
+@@ -3487,7 +3545,9 @@
 
  async fn run_ydotool_type_text(text: &str) -> std::result::Result<Output, String> {
      ydotool::ensure_supported()?;
 -    let mut command = TokioCommand::new("ydotool");
-+    if crate::windowing::backends::hyprland::uses_german_layout() {
-+        if let Some(chunks) = german_text_event_chunks(text) {
-+            let mut last_output = None;
-+            for chunk in chunks {
-+                last_output = Some(run_ydotool(&chunk).await?);
-+            }
-+            return last_output.ok_or_else(|| "ydotool received no text events".to_string());
-+        }
-+    }
 +    let ydotool_path = crate::diagnostics::resolve_command("ydotool")
 +        .ok_or_else(|| "ydotool was not found in the desktop process PATH or Nix profiles".to_string())?;
 +    let mut command = TokioCommand::new(ydotool_path);
@@ -1227,179 +1217,26 @@
      candidates.push(PathBuf::from("/tmp/.ydotool_socket"));
      candidates
  }
-@@ -3801,7 +3872,136 @@
+@@ -3801,7 +3872,13 @@
      .to_string()
  }
 
--fn key_sequence(key: &str) -> Option<Vec<String>> {
 +fn text_contains_layout_sensitive_characters(text: &str) -> bool {
 +    text.chars().any(|character| {
 +        !character.is_ascii_alphanumeric() && !matches!(character, ' ' | '\n' | '\r' | '\t')
 +    })
 +}
 +
-+/// Build raw evdev events for the active German XKB layout. `ydotool type`
-+/// translates strings using a US-oriented table; sending those same physical
-+/// keycodes to a German Hyprland session turns `>` into `:` and swaps `y`/`z`.
-+/// This small layout adapter keeps the no-dependency ydotool path correct for
-+/// the printable DE/latin1 set used by normal text and programming input.
-+fn german_text_event_chunks(text: &str) -> Option<Vec<Vec<String>>> {
-+    const MAX_EVENTS_PER_COMMAND: usize = 768;
-+    if text.is_empty() {
-+        return None;
-+    }
-+    let mut chunks = Vec::new();
-+    let mut current = vec!["key".to_string()];
-+    let mut event_count = 0;
-+
-+    for character in text.chars() {
-+        let strokes = german_character_strokes(character)?;
-+        let stroke_event_count = strokes
-+            .iter()
-+            .map(|(_, shift, altgr)| 4 + usize::from(*shift) * 2 + usize::from(*altgr) * 2)
-+            .sum::<usize>();
-+        if event_count > 0 && event_count + stroke_event_count > MAX_EVENTS_PER_COMMAND {
-+            chunks.push(current);
-+            current = vec!["key".to_string()];
-+            event_count = 0;
-+        }
-+        for (keycode, shift, altgr) in strokes {
-+            append_text_key_events(&mut current, keycode, shift, altgr);
-+            event_count += 4 + usize::from(shift) * 2 + usize::from(altgr) * 2;
-+        }
-+    }
-+
-+    if current.len() > 1 {
-+        chunks.push(current);
-+    }
-+    Some(chunks)
-+}
-+
-+fn append_text_key_events(events: &mut Vec<String>, keycode: u16, shift: bool, altgr: bool) {
-+    if shift {
-+        events.push("42:1".to_string());
-+    }
-+    if altgr {
-+        events.push("100:1".to_string());
-+    }
-+    events.push(format!("{keycode}:1"));
-+    events.push(format!("{keycode}:0"));
-+    if altgr {
-+        events.push("100:0".to_string());
-+    }
-+    if shift {
-+        events.push("42:0".to_string());
-+    }
-+}
-+
-+fn german_character_strokes(character: char) -> Option<Vec<(u16, bool, bool)>> {
-+    let lower = character.to_ascii_lowercase();
-+    if lower.is_ascii_alphabetic() {
-+        let physical = match lower {
-+            // The German layout places Z and Y at the opposite physical keys.
-+            'y' => keycode_for_ascii('z')?,
-+            'z' => keycode_for_ascii('y')?,
-+            _ => keycode_for_ascii(lower)?,
-+        };
-+        return Some(vec![(
-+            physical,
-+            character.is_ascii_uppercase(),
-+            false,
-+        )]);
-+    }
-+
-+    if character.is_ascii_digit() {
-+        return Some(vec![(keycode_for_ascii(character)?, false, false)]);
-+    }
-+
-+    let stroke = match character {
-+        ' ' => (57, false, false),
-+        '\n' | '\r' => (28, false, false),
-+        '\t' => (15, false, false),
-+        '!' => (2, true, false),
-+        '"' => (3, true, false),
-+        '#' => (43, false, false),
-+        '$' => (5, true, false),
-+        '%' => (6, true, false),
-+        '&' => (7, true, false),
-+        '\'' => (43, true, false),
-+        '(' => (9, true, false),
-+        ')' => (10, true, false),
-+        '*' => (27, true, false),
-+        '+' => (27, false, false),
-+        ',' => (51, false, false),
-+        '-' => (53, false, false),
-+        '.' => (52, false, false),
-+        '/' => (8, true, false),
-+        ':' => (52, true, false),
-+        ';' => (51, true, false),
-+        '<' => (86, false, false),
-+        '=' => (11, true, false),
-+        '>' => (86, true, false),
-+        '?' => (12, true, false),
-+        '@' => (16, false, true),
-+        '[' => (9, false, true),
-+        '\\' => (12, false, true),
-+        ']' => (10, false, true),
-+        '^' => return Some(vec![(41, false, false), (57, false, false)]),
-+        '_' => (53, true, false),
-+        '`' => return Some(vec![(13, true, false), (57, false, false)]),
-+        '{' => (8, false, true),
-+        '|' => (86, false, true),
-+        '}' => (11, false, true),
-+        '~' => (27, false, true),
-+        'ä' => (40, false, false),
-+        'Ä' => (40, true, false),
-+        'ö' => (39, false, false),
-+        'Ö' => (39, true, false),
-+        'ü' => (26, false, false),
-+        'Ü' => (26, true, false),
-+        'ß' => (12, false, false),
-+        '€' => (18, false, true),
-+        _ => return None,
-+    };
-+    Some(vec![stroke])
-+}
-+
-+fn key_sequence_for_layout(key: &str, german_layout: bool) -> Option<Vec<String>> {
+ fn key_sequence(key: &str) -> Option<Vec<String>> {
      let parts = key
          .split('+')
          .map(str::trim)
-@@ -3817,7 +4017,7 @@
-     for part in modifier_parts {
-         modifiers.push(modifier_keycode(part)?);
-     }
--    let keycode = keycode(key_part)?;
-+    let keycode = keycode_for_layout(key_part, german_layout)?;
-
-     let mut events = Vec::new();
-     for modifier in &modifiers {
-@@ -3831,6 +4031,19 @@
-     Some(events)
- }
-
-+fn keycode_for_layout(key: &str, german_layout: bool) -> Option<u16> {
-+    if german_layout {
-+        match normalize_key(key).as_str() {
-+            // German swaps the physical Y and Z positions. Keep logical
-+            // press_key("y")/press_key("z") semantics stable.
-+            "y" => return Some(44),
-+            "z" => return Some(21),
-+            _ => {}
-+        }
-+    }
-+    keycode(key)
-+}
-+
- fn modifier_keycode(key: &str) -> Option<u16> {
-     match normalize_key(key).as_str() {
-         "ctrl" | "control" => Some(29),
 @@ -4847,7 +5060,7 @@
      #[test]
      fn key_sequence_presses_modifiers_around_key() {
          assert_eq!(
 -            key_sequence("Ctrl+Shift+P"),
-+            key_sequence_for_layout("Ctrl+Shift+P", false),
++            key_sequence("Ctrl+Shift+P"),
              Some(vec![
                  "29:1".to_string(),
                  "42:1".to_string(),
@@ -1408,7 +1245,7 @@
      fn key_sequence_presses_bare_modifier() {
          assert_eq!(
 -            key_sequence("Super"),
-+            key_sequence_for_layout("Super", false),
++            key_sequence("Super"),
              Some(vec!["125:1".to_string(), "125:0".to_string()])
          );
      }
@@ -1417,79 +1254,30 @@
      fn key_sequence_keeps_shortcuts_and_navigation_on_raw_events() {
          assert_eq!(
 -            key_sequence("Ctrl+L"),
-+            key_sequence_for_layout("Ctrl+L", false),
++            key_sequence("Ctrl+L"),
              Some(vec![
                  "29:1".to_string(),
                  "38:1".to_string(),
-@@ -4879,19 +5092,68 @@
+@@ -4879,19 +5092,19 @@
              ])
          );
          assert_eq!(
 -            key_sequence("ArrowLeft"),
-+            key_sequence_for_layout("ArrowLeft", false),
++            key_sequence("ArrowLeft"),
              Some(vec!["105:1".to_string(), "105:0".to_string()])
          );
          assert_eq!(
 -            key_sequence("Escape"),
-+            key_sequence_for_layout("Escape", false),
++            key_sequence("Escape"),
              Some(vec!["1:1".to_string(), "1:0".to_string()])
          );
          assert_eq!(
 -            key_sequence("Enter"),
-+            key_sequence_for_layout("Enter", false),
++            key_sequence("Enter"),
              Some(vec!["28:1".to_string(), "28:0".to_string()])
          );
      }
 
-+    #[test]
-+    fn german_key_sequence_swaps_logical_y_and_z() {
-+        assert_eq!(
-+            key_sequence_for_layout("y", true),
-+            Some(vec!["44:1".to_string(), "44:0".to_string()])
-+        );
-+        assert_eq!(
-+            key_sequence_for_layout("Ctrl+Z", true),
-+            Some(vec![
-+                "29:1".to_string(),
-+                "21:1".to_string(),
-+                "21:0".to_string(),
-+                "29:0".to_string(),
-+            ])
-+        );
-+    }
-+
-+    #[test]
-+    fn german_text_uses_iso_key_for_greater_than_instead_of_us_period() {
-+        let chunks = german_text_event_chunks(">").expect("DE text should be representable");
-+
-+        assert_eq!(
-+            chunks,
-+            vec![vec![
-+                "key".to_string(),
-+                "42:1".to_string(),
-+                "86:1".to_string(),
-+                "86:0".to_string(),
-+                "42:0".to_string(),
-+            ]]
-+        );
-+    }
-+
-+    #[test]
-+    fn german_text_swaps_y_and_z_physical_keys() {
-+        let chunks = german_text_event_chunks("yz").expect("DE text should be representable");
-+
-+        assert_eq!(
-+            chunks[0],
-+            vec![
-+                "key".to_string(),
-+                "44:1".to_string(),
-+                "44:0".to_string(),
-+                "21:1".to_string(),
-+                "21:0".to_string(),
-+            ]
-+        );
-+    }
-+
      #[test]
      fn ydotool_type_timeout_scales_with_text_length() {
          assert_eq!(ydotool_type_timeout("").as_secs(), 10);
@@ -1559,7 +1347,7 @@
  use std::time::SystemTime;
 
  pub const HYPRLAND_BACKEND: &str = "hyprland";
-@@ -82,21 +82,135 @@
+@@ -82,19 +82,107 @@
  }
 
  pub fn activate_window(window_id: u64) -> Result<()> {
@@ -1595,32 +1383,6 @@
      }
 +    dispatch_window_pixel("resize", "resizewindowpixel", width, height, window_id)
 +        .map(|()| format!("Hyprland resized window 0x{window_id:x} to {width}x{height}."))
-+}
-+
-+pub fn keyboard_layout() -> Option<String> {
-+    let output = hyprctl_output(&["getoption", "input:kb_layout", "-j"]).ok()?;
-+    if !output.status.success() {
-+        return None;
-+    }
-+    serde_json::from_slice::<serde_json::Value>(&output.stdout)
-+        .ok()?
-+        .get("str")
-+        .and_then(serde_json::Value::as_str)
-+        .map(ToOwned::to_owned)
-+}
-+
-+pub fn uses_german_layout() -> bool {
-+    keyboard_layout().is_some_and(|layout| layout_includes_german(&layout))
-+}
-+
-+fn layout_includes_german(layout: &str) -> bool {
-+    layout.split(',').any(|entry| {
-+        entry
-+            .trim()
-+            .split([':', '+'])
-+            .next()
-+            .is_some_and(|name| name.eq_ignore_ascii_case("de"))
-+    })
 +}
 +
 +fn dispatch_window_pixel(
@@ -1706,18 +1468,10 @@
      let has_signature = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")
          .ok()
          .is_some_and(|value| !value.trim().is_empty());
-@@ -227,6 +341,33 @@
+@@ -227,5 +313,24 @@
 
          assert_eq!(selected.signature, "newer");
      }
-+
-+    #[test]
-+    fn recognizes_german_layout_variants() {
-+        assert!(layout_includes_german("de"));
-+        assert!(layout_includes_german("us,de"));
-+        assert!(layout_includes_german("de:latin1"));
-+        assert!(!layout_includes_german("us"));
-+    }
 +
 +    #[test]
 +    fn builds_hyprland_056_lua_dispatches_with_exact_window_selectors() {
