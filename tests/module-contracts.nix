@@ -30,10 +30,17 @@ let
   };
 
   codexDesktop = self.homeManagerModules.codexDesktop {
-    config.programs.codexDesktopLinux = {
-      computerUseUi.enable = false;
-      remoteMobileControl.enable = false;
-      linuxFeatures = [ ];
+    config = {
+      programs.codexDesktopLinux = {
+        enable = true;
+        computerUseUi.enable = false;
+        remoteMobileControl.enable = false;
+        linuxFeatures = [ ];
+      };
+      wayland.windowManager.hyprland = {
+        enable = true;
+        configType = "lua";
+      };
     };
     inherit lib pkgs;
   };
@@ -42,6 +49,40 @@ let
     config.services.codexComputerUse = {
       enable = true;
       user = "module-test";
+    };
+    inherit lib pkgs;
+  };
+
+  codexComputerUseHyprland = self.homeManagerModules.codexComputerUseHyprland {
+    config = {
+      programs.codexDesktopLinux.enable = true;
+      wayland.windowManager.hyprland = {
+        enable = true;
+        configType = "lua";
+      };
+    };
+    inherit lib pkgs;
+  };
+
+  codexComputerUseHyprlandDisabled = self.homeManagerModules.codexComputerUseHyprland {
+    config = {
+      programs.codexComputerUseHyprland.enable = false;
+      programs.codexDesktopLinux.enable = true;
+      wayland.windowManager.hyprland = {
+        enable = true;
+        configType = "lua";
+      };
+    };
+    inherit lib pkgs;
+  };
+
+  codexComputerUseHyprlang = self.homeManagerModules.codexComputerUseHyprland {
+    config = {
+      programs.codexDesktopLinux.enable = true;
+      wayland.windowManager.hyprland = {
+        enable = true;
+        configType = "hyprlang";
+      };
     };
     inherit lib pkgs;
   };
@@ -70,7 +111,7 @@ assert packagePaths openCodeConfig.home.packages == [ self.packages.${system}.op
 assert kimiCode.config.condition;
 assert builtins.hasAttr "package" kimiCode.options.programs.kimiCode;
 assert packagePaths kimiCodeConfig.home.packages == [ self.packages.${system}.kimi-code.outPath ];
-assert builtins.length codexDesktop.imports == 1;
+assert builtins.length codexDesktop.imports == 2;
 assert
   codexDesktop.programs.codexDesktopLinux.package.content.outPath
   == self.packages.${system}.codex-desktop.outPath;
@@ -84,6 +125,19 @@ assert codexComputerUse.config.content.users.users.condition;
 assert
   codexComputerUse.config.content.users.users.content."module-test".extraGroups.content
   == [ "ydotool" ];
+assert codexComputerUseHyprland.config.condition;
+assert
+  codexComputerUseHyprland.config.content.wayland.windowManager.hyprland.settings.device.content
+  == [
+    {
+      name = "ydotoold-virtual-device";
+      kb_layout = "us";
+      kb_variant = "";
+      kb_options = "";
+    }
+  ];
+assert !codexComputerUseHyprlandDisabled.config.condition;
+assert !codexComputerUseHyprlang.config.condition;
 assert codexOmx.config.condition;
 assert
   packagePaths codexOmxConfig.home.packages == packagePaths [

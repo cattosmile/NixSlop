@@ -169,13 +169,19 @@
           };
         in
         {
-          imports = [ codex-desktop-linux.homeManagerModules.default ];
+          imports = [
+            codex-desktop-linux.homeManagerModules.default
+            self.homeManagerModules.codexComputerUseHyprland
+          ];
 
           programs.codexDesktopLinux = {
             cliPackage = lib.mkDefault self.packages.${system}.codex;
             package = lib.mkDefault defaultPackage;
           };
         };
+
+      homeManagerModules.codexComputerUseHyprland =
+        import ./nix/home-manager-codex-computer-use-hyprland.nix;
 
       homeManagerModules.kimiCode =
         {
