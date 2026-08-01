@@ -59,6 +59,25 @@ This enables AT-SPI2 and ydotool without enabling GNOME Shell or requiring a
 GNOME session. Set `user = null` when ydotool group membership is managed
 elsewhere.
 
+### Hyprland ydotool keyboard mapping
+
+`ydotool type` emits US physical keycodes. On Hyprland, keep the virtual
+ydotool keyboard on an isolated US keymap while leaving physical keyboards on
+their normal layout:
+
+```nix
+wayland.windowManager.hyprland.settings.config.device = {
+  "ydotoold-virtual-device" = {
+    kb_layout = "us";
+    kb_variant = "";
+    kb_options = "";
+  };
+};
+```
+
+The packaged Computer Use backend uses the same US-mapped virtual device, so
+manual `ydotool type` commands and Computer Use produce the same characters.
+
 ### Kimi Code
 
 ```nix
