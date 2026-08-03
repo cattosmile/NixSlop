@@ -1,0 +1,24 @@
+name: Update Foundations
+
+on:
+  schedule:
+    - cron: '47 12 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nixslop-update-global
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Run foundation inputs update
+    uses: ./.github/workflows/update-reusable.yml
+    with:
+      program: foundations
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}

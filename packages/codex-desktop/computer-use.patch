@@ -1,7 +1,6 @@
 --- a/computer-use-linux/src/windowing/registry.rs
 +++ b/computer-use-linux/src/windowing/registry.rs
-@@ -45,12 +45,12 @@
- 
+@@ -44,11 +44,11 @@
  }
  
  const BACKEND_ORDER: &[BackendKind] = &[
@@ -14,10 +13,6 @@
      BackendKind::Niri,
      BackendKind::I3,
      // Generic X11/EWMH: last, so a session-native backend always wins first.
-     BackendKind::X11,
- ];
---- a/computer-use-linux/src/windowing/registry.rs
-+++ b/computer-use-linux/src/windowing/registry.rs
 @@ -250,24 +250,26 @@
  
  pub async fn move_window(window: &WindowInfo, x: i32, y: i32) -> Result<String> {
@@ -49,8 +44,8 @@
  }
 --- a/computer-use-linux/src/windowing/backends/hyprland.rs
 +++ b/computer-use-linux/src/windowing/backends/hyprland.rs
-@@ -264,6 +264,63 @@
-     format!("hl.dsp.focus({{ window = \"{address}\" }})")
+@@ -242,6 +242,57 @@
+     }
  }
  
 +pub async fn move_window(window_id: u64, x: i32, y: i32) -> Result<String> {
@@ -104,12 +99,15 @@
 +    )
 +}
 +
+ fn dispatch_succeeded(output: &std::process::Output) -> bool {
+     output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "ok"
+ }
+@@ -267 +318,7 @@
+-
++
 +fn lua_pixel_dispatch(dispatcher: &str, x: i32, y: i32, address: &str) -> String {
 +    format!(
 +        "hl.dsp.window.{dispatcher}({{ x = {x}, y = {y}, relative = false, window = \"{address}\" }})"
 +    )
 +}
 +
- fn command_detail(output: &std::process::Output) -> String {
-     let stdout = String::from_utf8_lossy(&output.stdout);
-     let stderr = String::from_utf8_lossy(&output.stderr);

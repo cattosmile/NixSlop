@@ -1,48 +1,118 @@
-# NixSlop
+# NixSlop Home Manager
 
-## Supported systems
+NixSlop provides fast-moving developer tools through Home Manager while keeping
+their package pins, desktop integration, checks, and daily updates in one flake.
+Import one aggregate module, enable only the programs you want, and keep the
+rest of your system configuration in the consuming flake.
+
+Supported systems:
 
 - `x86_64-linux`
 - `aarch64-linux`
 
-## Included
+## Use the aggregate Home Manager module
 
-- OpenCode: `opencode`
-- Codex Desktop: `codex-desktop`
-- Kimi Code: `kimi`
-- Codex + OMX: `codex`, `omx`, `tmux`
-
-## Use from Home Manager
+Add the input:
 
 ```nix
-inputs.nixslop.url = "github:cattosmile/NixSlop";
+inputs.nixslop = {
+  url = "github:cattosmile/NixSlop-HomeManager";
+  inputs.nixpkgs.follows = "nixpkgs";
+};
 ```
 
-### OpenCode
-
-```nix
-{
-  imports = [ inputs.nixslop.homeManagerModules.openCode ];
-
-  programs.openCode.enable = true;
-}
-```
-
-### Codex Desktop
+Import `homeManagerModules.default` (or its identical `nixslop` alias), then
+use the native Home Manager `programs.opencode` and `programs.codex` settings
+alongside the NixSlop-specific Kimi, desktop, and OMX options:
 
 ```nix
 {
-  imports = [ inputs.nixslop.homeManagerModules.codexDesktop ];
+  imports = [ inputs.nixslop.homeManagerModules.default ];
 
-  programs.codexDesktopLinux.enable = true;
+  programs = {
+    opencode = {
+      enable = true;
+      settings = {
+        model = "provider/model";
+        autoupdate = false;
+      };
+      context = ''
+        Project instructions for OpenCode.
+      '';
+    };
+
+    kimiCode = {
+      enable = true;
+      settings = {
+        default_model = "kimi-code/k3";
+        telemetry = false;
+      };
+    };
+
+    codexOmx = {
+      enable = true;
+      setupPlugin = false;
+    };
+
+    codex = {
+      enable = true;
+      settings = {
+        model = "gpt-5.6";
+        approval_policy = "never";
+      };
+      context = ''
+        Shared Codex instructions.
+      '';
+    };
+
+    codexDesktopLinux.enable = true;
+  };
 }
 ```
 
-The default package includes the Hyprland-compatible Computer Use plugin and
-its native Linux backend. The system-side accessibility and input services
-can be enabled through the companion NixOS module:
+The aggregate module imports all NixSlop Home Manager integrations; it does not
+enable programs by itself. NixSlop supplies its package builds as defaults, so
+normal Home Manager settings still own generated OpenCode and Codex files.
 
-### NixOS Computer Use runtime
+### Choose one Codex configuration owner
+
+`programs.codexOmx.setupPlugin` decides who owns `~/.codex/config.toml`:
+
+- `setupPlugin = false` allows the native Home Manager
+  `programs.codex.settings`, `programs.codex.context`, and related options to
+  own Codex configuration declaratively. This is the recommended mode for a
+  Nix-managed configuration. It requires a Home Manager revision that provides
+  `programs.codex.plugins`; the module fails with a targeted assertion on older
+  revisions instead of silently omitting OMX.
+- `setupPlugin = true` (the compatibility default) runs idempotent
+  `omx setup --plugin` during Home Manager activation. OMX then owns the
+  mutable Codex configuration, so `programs.codex.enable` must remain `false`.
+
+The module rejects enabling mutable OMX setup and declarative Codex file
+generation at the same time. A mutable OMX setup is therefore explicit:
+
+```nix
+programs = {
+  codex.enable = false;
+  codexOmx = {
+    enable = true;
+    setupPlugin = true;
+  };
+};
+```
+
+### Kimi settings and secrets
+
+`programs.kimiCode.settings` generates `~/.kimi-code/config.toml`. Values
+declared in Home Manager are copied through the Nix store. Do not put API keys
+or other secrets in this attribute set; provide them through a Kimi-supported
+credential or environment mechanism outside the declarative store. If you set
+`KIMI_CODE_HOME` to a different location, manage that location separately.
+
+## Codex Desktop Computer Use on NixOS
+
+The NixSlop Codex Desktop package bundles the Linux Computer Use backend. Enable
+its compositor-neutral system services separately in the NixOS configuration:
 
 ```nix
 {
@@ -55,72 +125,43 @@ can be enabled through the companion NixOS module:
 }
 ```
 
-This enables AT-SPI2 and ydotool without enabling GNOME Shell or requiring a
-GNOME session. Set `user = null` when ydotool group membership is managed
-elsewhere.
+This enables AT-SPI2 and ydotool without enabling GNOME Shell or selecting a
+GNOME session. Set `user = null` when group membership is managed elsewhere.
 
-### Hyprland ydotool keyboard mapping
-
-When `programs.codexDesktopLinux.enable = true` and Hyprland is enabled with
-Lua configuration, the `codexDesktop` Home Manager module automatically keeps
-the virtual ydotool keyboard on an isolated US keymap. Physical keyboards keep
-their normal layout. The generated Lua contains a separate `hl.device({...})`
-call for `ydotoold-virtual-device`.
-
-The automatic integration can be disabled explicitly:
+When Codex Desktop and Hyprland Lua configuration are both enabled, the Home
+Manager integration gives only `ydotoold-virtual-device` a US keymap. Physical
+keyboards retain their configured layout. Opt out with:
 
 ```nix
 programs.codexComputerUseHyprland.enable = false;
 ```
 
-The packaged Computer Use backend uses the same US-mapped virtual device, so
-manual `ydotool type` commands and Computer Use produce the same characters.
+The opt-in `codex-desktop-computer-use-ui` output validates the Linux feature,
+native-app, host-platform, and install-flow patches during its own build. With
+the current Codex Desktop 26.727 renderer, the separate settings-card
+availability patch is still an upstream `skipped-optional` path. The backend
+and plugin remain installed, but UI visibility can therefore still depend on
+the account/server rollout. NixSlop does not hide that limitation behind a
+successful executable-only smoke test.
 
-### Kimi Code
+## Stable compatibility APIs
 
-```nix
-{
-  imports = [ inputs.nixslop.homeManagerModules.kimiCode ];
+Existing individual imports and option paths remain supported:
 
-  programs.kimiCode.enable = true;
-}
-```
+| Integration | Individual module | Stable option |
+| --- | --- | --- |
+| OpenCode adapter | `homeManagerModules.openCode` | `programs.openCode.enable` |
+| Codex Desktop | `homeManagerModules.codexDesktop` | `programs.codexDesktopLinux` |
+| Hyprland virtual keyboard | `homeManagerModules.codexComputerUseHyprland` | `programs.codexComputerUseHyprland.enable` |
+| Kimi Code | `homeManagerModules.kimiCode` | `programs.kimiCode` |
+| Codex + OMX | `homeManagerModules.codexOmx` | `programs.codexOmx` |
+| Computer Use services | `nixosModules.codexComputerUse` | `services.codexComputerUse` |
 
-### Codex + OMX
+`homeManagerModules.default`, `homeManagerModules.nixslop`, all nine public
+package outputs, and the existing Codex Desktop override arguments form the
+current compatibility boundary.
 
-```nix
-{
-  imports = [ inputs.nixslop.homeManagerModules.codexOmx ];
-
-  programs.codexOmx.enable = true;
-}
-```
-
-## Enable everything
-
-```nix
-{
-  imports = [
-    inputs.nixslop.homeManagerModules.openCode
-    inputs.nixslop.homeManagerModules.codexDesktop
-    inputs.nixslop.homeManagerModules.kimiCode
-    inputs.nixslop.homeManagerModules.codexOmx
-  ];
-
-  programs.openCode.enable = true;
-  programs.codexDesktopLinux.enable = true;
-  programs.kimiCode.enable = true;
-  programs.codexOmx.enable = true;
-}
-```
-
-## Optional
-
-```nix
-programs.codexOmx.setupPlugin = false;
-```
-
-## Cachix (NixOS configuration)
+## Binary cache
 
 ```nix
 nix.settings = {
@@ -131,18 +172,32 @@ nix.settings = {
 };
 ```
 
-## Update
+## Update your consumer
 
-### Home Manager
+Home Manager:
 
 ```sh
 nix flake update nixslop
 home-manager switch
 ```
 
-### NixOS
+NixOS:
 
 ```sh
 nix flake update nixslop
 sudo nixos-rebuild switch --flake .#hostname
 ```
+
+## Repository automation and design
+
+Six fixed-target update workflows run daily on staggered UTC schedules. They
+serialize through one mutex, fully validate the selected update, and merge only
+through a target-specific `update/<target>` pull request. The stable
+`Update Health` workflow checks the latest scheduled result for every lane;
+Hermes should monitor that workflow name instead of a repository-wide “latest
+run”. See [docs/updates.md](docs/updates.md) for schedules and failure behavior.
+
+NixSlop remains a modular monorepo today so package dependencies, Home Manager
+defaults, compatibility checks, and lock updates can change atomically. The
+future split boundary and current component ownership are documented in
+[docs/architecture.md](docs/architecture.md).

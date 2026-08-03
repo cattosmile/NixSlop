@@ -1,0 +1,94 @@
+name: Update Health
+
+on:
+  schedule:
+    # Runs after all staggered update schedules. The 36-hour window tolerates
+    # normal GitHub schedule delays while still detecting a missed daily lane.
+    - cron: '47 23 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: update-health
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  update-health:
+    name: Verify scheduled update health
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify named update workflows
+        id: verify_update_health
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          max_age_hours=36
+          oldest_allowed="$(( $(date -u +%s) - max_age_hours * 60 * 60 ))"
+          failures=0
+
+          workflows=(
+            "Update Codex|update-codex.yml"
+            "Update Codex Desktop|update-codex-desktop.yml"
+            "Update Kimi Code|update-kimi-code.yml"
+            "Update OpenCode|update-opencode.yml"
+            "Update oh-my-codex|update-oh-my-codex.yml"
+            "Update Foundations|update-foundations.yml"
+          )
+
+          for specification in "${workflows[@]}"; do
+            expected_name="${specification%%|*}"
+            workflow_file="${specification##*|}"
+
+            if ! actual_name="$(
+              gh api \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_file" \
+                --jq .name
+            )"; then
+              echo "::error::$expected_name could not be inspected"
+              failures=$((failures + 1))
+              continue
+            fi
+            if [ "$actual_name" != "$expected_name" ]; then
+              echo "::error::$workflow_file is named '$actual_name', expected '$expected_name'"
+              failures=$((failures + 1))
+              continue
+            fi
+
+            if ! latest="$(
+              gh api \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_file/runs?event=schedule&per_page=1" \
+                --jq '.workflow_runs[0] // empty'
+            )" || [ -z "$latest" ]; then
+              echo "::error::$expected_name has no workflow run"
+              failures=$((failures + 1))
+              continue
+            fi
+
+            status="$(jq -r .status <<< "$latest")"
+            conclusion="$(jq -r '.conclusion // ""' <<< "$latest")"
+            created_at="$(jq -r .created_at <<< "$latest")"
+            html_url="$(jq -r .html_url <<< "$latest")"
+            created_epoch="$(date -u -d "$created_at" +%s)"
+
+            if [ "$status" != "completed" ] || [ "$conclusion" != "success" ]; then
+              echo "::error::$expected_name latest run is status=$status conclusion=$conclusion ($html_url)"
+              failures=$((failures + 1))
+            elif [ "$created_epoch" -lt "$oldest_allowed" ]; then
+              echo "::error::$expected_name latest scheduled run was created more than $max_age_hours hours ago ($created_at, $html_url)"
+              failures=$((failures + 1))
+            else
+              echo "$expected_name healthy: scheduled at $created_at and completed successfully"
+            fi
+          done
+
+          if [ "$failures" -ne 0 ]; then
+            echo "::error::$failures scheduled update workflow(s) are unhealthy"
+            exit 1
+          fi

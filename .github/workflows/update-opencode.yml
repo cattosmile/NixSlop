@@ -1,0 +1,24 @@
+name: Update OpenCode
+
+on:
+  schedule:
+    - cron: '47 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nixslop-update-global
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Run OpenCode update
+    uses: ./.github/workflows/update-reusable.yml
+    with:
+      program: opencode
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
