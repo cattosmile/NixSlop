@@ -20,34 +20,50 @@ defaults:
 
 jobs:
   validate:
+    name: Validate repository contracts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Install Nix
+        id: install_nix
         uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
       - name: Configure NixSlop binary cache
+        id: configure_cache
         uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
         with:
           name: nixslop
 
-      - name: Test updater helpers
+      - name: Run Python contract tests
+        id: python_contracts
         run: python3 -m unittest discover -s tests -v
 
-      - name: Validate flake and module contracts
+      - name: Evaluate flake without building
+        id: evaluate_flake
+        run: nix flake check --all-systems --no-build --print-build-logs
+
+      - name: Build module and patch-source checks
+        id: build_contract_checks
         run: |
-          nix flake check --all-systems --no-build --print-build-logs
           nix build --no-link \
             .#checks.x86_64-linux.module-contracts \
+            .#checks.x86_64-linux.output-contracts \
+            .#checks.x86_64-linux.home-manager-contracts \
+            .#checks.x86_64-linux.formatting \
+            .#checks.x86_64-linux.actionlint \
+            .#checks.x86_64-linux.workflow-contracts \
+            .#checks.x86_64-linux.codex-desktop-patch-source \
             .#checks.x86_64-linux.codex-desktop-computer-use \
             --print-build-logs
 
   build:
+    name: Build and smoke test ${{ matrix.package }}
     needs: validate
     runs-on: ubuntu-latest
     strategy:
@@ -55,26 +71,34 @@ jobs:
       matrix:
         package:
           - codex
+          - codex-computer-use-linux
           - codex-desktop
+          - codex-desktop-computer-use-ui
+          - codex-desktop-remote-mobile-control
+          - codex-desktop-computer-use-ui-remote-mobile-control
           - kimi-code
           - opencode
           - oh-my-codex
     steps:
       - name: Checkout repository
+        id: checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Install Nix
+        id: install_nix
         uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
 
       - name: Configure NixSlop binary cache
+        id: configure_cache
         uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
         with:
           name: nixslop
 
-      - name: Build and smoke test ${{ matrix.package }}
+      - name: Build and smoke test package
+        id: build_and_smoke
         env:
           PACKAGE: ${{ matrix.package }}
         run: |
@@ -84,7 +108,15 @@ jobs:
             codex)
               "$package_path/bin/codex" --version
               ;;
-            codex-desktop)
+            codex-computer-use-linux)
+              test -x "$package_path/bin/codex-computer-use-linux"
+              test -x "$package_path/bin/codex-computer-use-cosmic"
+              test -x "$package_path/bin/codex-chrome-extension-host"
+              "$package_path/bin/codex-computer-use-linux" --help
+              "$package_path/bin/codex-computer-use-cosmic" --help
+              "$package_path/bin/codex-chrome-extension-host" </dev/null
+              ;;
+            codex-desktop|codex-desktop-computer-use-ui|codex-desktop-remote-mobile-control|codex-desktop-computer-use-ui-remote-mobile-control)
               test -x "$package_path/bin/codex-desktop"
               ;;
             kimi-code)
@@ -95,5 +127,9 @@ jobs:
               ;;
             oh-my-codex)
               "$package_path/bin/omx" --version
+              ;;
+            *)
+              echo "::error::No smoke test is defined for $PACKAGE"
+              exit 1
               ;;
           esac

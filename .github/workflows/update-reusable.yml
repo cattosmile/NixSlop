@@ -1,0 +1,883 @@
+name: Reusable Program Update
+
+on:
+  workflow_call:
+    inputs:
+      program:
+        description: Fixed update target
+        required: true
+        type: string
+    secrets:
+      CACHIX_AUTH_TOKEN:
+        description: Optional write token for the NixSlop Cachix cache
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  update:
+    name: Update ${{ inputs.program }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Checkout repository
+        id: checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate fixed program
+        id: validate_program
+        env:
+          PROGRAM: ${{ inputs.program }}
+        run: |
+          case "$PROGRAM" in
+            codex|codex-desktop|kimi-code|opencode|oh-my-codex|foundations)
+              ;;
+            *)
+              echo "::error::Unsupported update program: $PROGRAM"
+              exit 1
+              ;;
+          esac
+
+      - name: Prepare isolated update branch
+        id: prepare_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROGRAM: ${{ inputs.program }}
+        run: |
+          branch="update/$PROGRAM"
+          pr_file="$RUNNER_TEMP/nixslop-update-pr-number"
+          remote_file="$RUNNER_TEMP/nixslop-update-remote"
+          base_file="$RUNNER_TEMP/nixslop-update-base-sha"
+          : > "$pr_file"
+          : > "$remote_file"
+          : > "$base_file"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags origin main
+          base_sha="$(git rev-parse origin/main)"
+          printf '%s\n' "$base_sha" > "$base_file"
+
+          if git ls-remote --exit-code --heads origin "$branch" > "$remote_file"; then
+            remote_sha="$(cut -f1 "$remote_file")"
+            git fetch origin "$branch"
+          else
+            remote_sha=""
+          fi
+
+          existing_pr_json="$(
+            gh pr list \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$branch" \
+              --state all \
+              --limit 100 \
+              --json number,state,updatedAt,isCrossRepository,baseRefName,baseRefOid,headRefName
+          )"
+          existing_pr="$(
+            jq -r \
+              --arg branch "$branch" \
+              '[.[] | select(
+                .isCrossRepository == false and
+                .baseRefName == "main" and
+                .headRefName == $branch and
+                .state != "MERGED"
+              )] | sort_by(.updatedAt) | reverse | .[0].number // empty' \
+              <<< "$existing_pr_json"
+          )"
+          if [ -n "$existing_pr" ]; then
+            printf '%s\n' "$existing_pr" > "$pr_file"
+          fi
+
+          git checkout -B "$branch" origin/main
+          {
+            echo "UPDATE_BRANCH=$branch"
+            echo "UPDATE_REMOTE_SHA=$remote_sha"
+            echo "UPDATE_BASE_SHA=$base_sha"
+          } >> "$GITHUB_ENV"
+
+      - name: Install Nix
+        id: install_nix
+        uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      - name: Configure NixSlop binary cache
+        id: configure_cache
+        uses: cachix/cachix-action@5f2d7c5294214f71b873db4b969586b980625e71 # v17
+        with:
+          name: nixslop
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Run Python contract tests
+        id: python_contracts
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Run fixed updater
+        id: run_updater
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PROGRAM: ${{ inputs.program }}
+        run: |
+          case "$PROGRAM" in
+            codex)
+              nix develop -c packages/codex/update.py
+              ;;
+            codex-desktop)
+              nix flake update codex-desktop-linux
+              ;;
+            kimi-code)
+              nix develop -c packages/kimi-code/update.py
+              ;;
+            opencode)
+              nix flake update opencode
+              ;;
+            oh-my-codex)
+              nix develop -c packages/oh-my-codex/update.py
+              ;;
+            foundations)
+              nix flake update nixpkgs systems home-manager
+              ;;
+          esac
+
+      - name: Validate exact update boundary
+        id: validate_changes
+        env:
+          PROGRAM: ${{ inputs.program }}
+        run: python3 scripts/validate_update.py "$PROGRAM" --base-ref origin/main
+
+      - name: Detect validated changes
+        id: detect_changes
+        run: |
+          if [ -n "$(git status --porcelain=v1 --untracked-files=all)" ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Evaluate flake without building
+        id: evaluate_flake
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        run: nix flake check --all-systems --no-build --print-build-logs
+
+      - name: Build x86 contract checks
+        id: build_contract_checks
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        run: |
+          nix build --no-link \
+            .#checks.x86_64-linux.module-contracts \
+            .#checks.x86_64-linux.output-contracts \
+            .#checks.x86_64-linux.home-manager-contracts \
+            .#checks.x86_64-linux.formatting \
+            .#checks.x86_64-linux.actionlint \
+            .#checks.x86_64-linux.workflow-contracts \
+            --print-build-logs
+
+      - name: Build desktop contract checks
+        id: build_desktop_contracts
+        if: >-
+          steps.detect_changes.outputs.has_changes == 'true' &&
+          (inputs.program == 'codex-desktop' || inputs.program == 'foundations')
+        run: |
+          nix build --no-link \
+            .#checks.x86_64-linux.codex-desktop-patch-source \
+            .#checks.x86_64-linux.codex-desktop-computer-use \
+            --print-build-logs
+
+      - name: Build and smoke test fixed targets
+        id: build_and_smoke
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        env:
+          PROGRAM: ${{ inputs.program }}
+        run: |
+          build_and_smoke() {
+            package="$1"
+            package_path="$(nix build --no-link --print-out-paths ".#$package" --print-build-logs)"
+
+            case "$package" in
+              codex)
+                "$package_path/bin/codex" --version
+                ;;
+              codex-computer-use-linux)
+                test -x "$package_path/bin/codex-computer-use-linux"
+                test -x "$package_path/bin/codex-computer-use-cosmic"
+                test -x "$package_path/bin/codex-chrome-extension-host"
+                "$package_path/bin/codex-computer-use-linux" --help
+                "$package_path/bin/codex-computer-use-cosmic" --help
+                "$package_path/bin/codex-chrome-extension-host" </dev/null
+                ;;
+              codex-desktop|codex-desktop-computer-use-ui|codex-desktop-remote-mobile-control|codex-desktop-computer-use-ui-remote-mobile-control)
+                test -x "$package_path/bin/codex-desktop"
+                ;;
+              kimi-code)
+                "$package_path/bin/kimi" --version
+                ;;
+              opencode)
+                "$package_path/bin/opencode" --version
+                ;;
+              oh-my-codex)
+                "$package_path/bin/omx" --version
+                ;;
+              *)
+                echo "::error::No smoke test is defined for $package"
+                return 1
+                ;;
+            esac
+          }
+
+          case "$PROGRAM" in
+            codex)
+              # oh-my-codex wraps this Codex output into its executable PATH.
+              packages=(codex oh-my-codex)
+              ;;
+            codex-desktop)
+              packages=(
+                codex-computer-use-linux
+                codex-desktop
+                codex-desktop-computer-use-ui
+                codex-desktop-remote-mobile-control
+                codex-desktop-computer-use-ui-remote-mobile-control
+              )
+              ;;
+            kimi-code)
+              packages=(kimi-code)
+              ;;
+            opencode)
+              packages=(opencode)
+              ;;
+            oh-my-codex)
+              packages=(oh-my-codex)
+              ;;
+            foundations)
+              packages=(
+                codex
+                codex-computer-use-linux
+                codex-desktop
+                codex-desktop-computer-use-ui
+                codex-desktop-remote-mobile-control
+                codex-desktop-computer-use-ui-remote-mobile-control
+                kimi-code
+                opencode
+                oh-my-codex
+              )
+              ;;
+          esac
+
+          for package in "${packages[@]}"; do
+            build_and_smoke "$package"
+          done
+
+      - name: Commit and publish update branch
+        id: publish_pr
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROGRAM: ${{ inputs.program }}
+        run: |
+          verify_base_unchanged() {
+            base_file="$RUNNER_TEMP/nixslop-update-base-sha"
+            if [ ! -s "$base_file" ]; then
+              echo "::error::The prepared origin/main SHA is unavailable" >&2
+              return 1
+            fi
+            expected_base="$(tr -d '[:space:]' < "$base_file")"
+            git fetch --no-tags origin main
+            actual_base="$(git rev-parse origin/main)"
+            if [ "$actual_base" != "$expected_base" ]; then
+              echo "::error::origin/main changed from $expected_base to $actual_base before branch publication" >&2
+              return 1
+            fi
+          }
+
+          verify_pr_identity() {
+            candidate="$1"
+            require_validated_commit="${2:-true}"
+            if ! details="$(
+              gh pr view "$candidate" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json number,state,isCrossRepository,baseRefName,baseRefOid,headRefName,headRefOid
+            )"; then
+              echo "::error::Could not inspect PR #$candidate" >&2
+              return 1
+            fi
+            if ! jq -e \
+              --argjson number "$candidate" \
+              --arg branch "$UPDATE_BRANCH" \
+              '.number == $number and
+               .isCrossRepository == false and
+               .baseRefName == "main" and
+               .headRefName == $branch' \
+              <<< "$details" >/dev/null; then
+              echo "::error::PR #$candidate is not the exact same-repository $UPDATE_BRANCH -> main update PR" >&2
+              return 1
+            fi
+            if [ "$require_validated_commit" = "true" ]; then
+              base_file="$RUNNER_TEMP/nixslop-update-base-sha"
+              head_file="$RUNNER_TEMP/nixslop-update-head-sha"
+              if [ ! -s "$base_file" ] || [ ! -s "$head_file" ]; then
+                echo "::error::The validated base/head SHA is unavailable while checking PR #$candidate" >&2
+                return 1
+              fi
+              expected_base="$(tr -d '[:space:]' < "$base_file")"
+              expected_head="$(tr -d '[:space:]' < "$head_file")"
+              if ! jq -e \
+                --arg expected_base "$expected_base" \
+                --arg expected_head "$expected_head" \
+                '.baseRefOid == $expected_base and
+                 .headRefOid == $expected_head' \
+                <<< "$details" >/dev/null; then
+                echo "::error::PR #$candidate no longer matches validated base=$expected_base head=$expected_head" >&2
+                return 1
+              fi
+            fi
+            printf '%s\n' "$details"
+          }
+
+          case "$PROGRAM" in
+            codex)
+              git add -- packages/codex/hashes.json
+              ;;
+            codex-desktop|opencode|foundations)
+              git add -- flake.lock
+              ;;
+            kimi-code)
+              git add -- packages/kimi-code/hashes.json
+              ;;
+            oh-my-codex)
+              git add -- \
+                packages/oh-my-codex/Cargo.lock \
+                packages/oh-my-codex/hashes.json
+              ;;
+          esac
+
+          git diff --cached --check
+          git commit -m "update($PROGRAM): refresh pinned source"
+          validated_head="$(git rev-parse HEAD)"
+          head_file="$RUNNER_TEMP/nixslop-update-head-sha"
+          printf '%s\n' "$validated_head" > "$head_file"
+          echo "UPDATE_HEAD_SHA=$validated_head" >> "$GITHUB_ENV"
+          verify_base_unchanged
+
+          if [ -n "$UPDATE_REMOTE_SHA" ]; then
+            git push \
+              --force-with-lease="refs/heads/$UPDATE_BRANCH:$UPDATE_REMOTE_SHA" \
+              origin "HEAD:refs/heads/$UPDATE_BRANCH"
+          else
+            git push origin "HEAD:refs/heads/$UPDATE_BRANCH"
+          fi
+          published_head="$(git ls-remote --exit-code --heads origin "$UPDATE_BRANCH" | cut -f1)"
+          if [ "$published_head" != "$validated_head" ]; then
+            echo "::error::Published $UPDATE_BRANCH head is $published_head, expected validated commit $validated_head"
+            exit 1
+          fi
+
+          gh label create automated \
+            --repo "$GITHUB_REPOSITORY" \
+            --color cfd3d7 \
+            --description "Automated changes" \
+            --force
+          gh label create dependencies \
+            --repo "$GITHUB_REPOSITORY" \
+            --color 0366d6 \
+            --description "Dependency updates" \
+            --force
+          gh label create update-quarantined \
+            --repo "$GITHUB_REPOSITORY" \
+            --color b60205 \
+            --description "Automation stopped before merge" \
+            --force
+
+          pr_file="$RUNNER_TEMP/nixslop-update-pr-number"
+          pr_number="$(tr -d '[:space:]' < "$pr_file")"
+          if [ -n "$pr_number" ]; then
+            details="$(verify_pr_identity "$pr_number" false)"
+            state="$(jq -r .state <<< "$details")"
+            case "$state" in
+              OPEN)
+                ;;
+              CLOSED)
+                gh pr reopen "$pr_number" --repo "$GITHUB_REPOSITORY"
+                details="$(verify_pr_identity "$pr_number")"
+                if [ "$(jq -r .state <<< "$details")" != "OPEN" ]; then
+                  echo "::error::PR #$pr_number was not proven open after reopen"
+                  exit 1
+                fi
+                ;;
+              MERGED)
+                pr_number=""
+                ;;
+              *)
+                echo "::error::Unexpected state for existing PR #$pr_number: $state"
+                exit 1
+                ;;
+            esac
+          fi
+
+          title="Update $PROGRAM"
+          body_file="$RUNNER_TEMP/nixslop-update-pr-body.md"
+          {
+            echo "Automated fixed-target update for \`$PROGRAM\`."
+            echo
+            echo "Validated before this branch was pushed:"
+            echo "- Python updater and workflow contract tests"
+            echo "- \`nix flake check --all-systems --no-build\`"
+            echo "- built x86 module, output, Home Manager, formatting, actionlint, and workflow contracts"
+            echo "- exact changed-path and lock-input ownership"
+            echo "- exact validated update commit \`$validated_head\`"
+            echo "- target package builds and smoke tests"
+            if [ "$PROGRAM" = "codex-desktop" ] || [ "$PROGRAM" = "foundations" ]; then
+              echo "- patched Computer Use source and packaged desktop plugin checks"
+            fi
+          } > "$body_file"
+
+          if [ -n "$pr_number" ]; then
+            verify_pr_identity "$pr_number" >/dev/null
+            gh pr edit "$pr_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "$title" \
+              --body-file "$body_file" \
+              --add-label automated \
+              --add-label dependencies
+            if ! labels="$(gh pr view "$pr_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json labels \
+              --jq '.labels[].name')"; then
+              echo "::error::Could not inspect labels on PR #$pr_number"
+              exit 1
+            fi
+            if grep -Fxq update-quarantined <<< "$labels"; then
+              verify_pr_identity "$pr_number" >/dev/null
+              gh pr edit "$pr_number" \
+                --repo "$GITHUB_REPOSITORY" \
+                --remove-label update-quarantined
+            fi
+          else
+            gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --base main \
+              --head "$UPDATE_BRANCH" \
+              --title "$title" \
+              --body-file "$body_file" \
+              --label automated \
+              --label dependencies
+            created_pr_json="$(
+              gh pr list \
+                --repo "$GITHUB_REPOSITORY" \
+                --head "$UPDATE_BRANCH" \
+                --state open \
+                --limit 100 \
+                --json number,updatedAt,isCrossRepository,baseRefName,baseRefOid,headRefName,headRefOid
+            )"
+            pr_number="$(
+              jq -r \
+                --arg branch "$UPDATE_BRANCH" \
+                --arg expected_head "$validated_head" \
+                '[.[] | select(
+                  .isCrossRepository == false and
+                  .baseRefName == "main" and
+                  .headRefName == $branch and
+                  .headRefOid == $expected_head
+                )] | sort_by(.updatedAt) | reverse | .[0].number // empty' \
+                <<< "$created_pr_json"
+            )"
+          fi
+
+          if [ -z "$pr_number" ]; then
+            echo "::error::Could not resolve the update PR number"
+            exit 1
+          fi
+          verify_pr_identity "$pr_number" >/dev/null
+          printf '%s\n' "$pr_number" > "$pr_file"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+
+      - name: Enable pull request auto-merge
+        id: enable_auto_merge
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head_file="$RUNNER_TEMP/nixslop-update-head-sha"
+          if [ ! -s "$head_file" ]; then
+            echo "::error::The validated update head SHA is unavailable before auto-merge"
+            exit 1
+          fi
+          expected_head="$(tr -d '[:space:]' < "$head_file")"
+
+          verify_base_unchanged() {
+            base_file="$RUNNER_TEMP/nixslop-update-base-sha"
+            if [ ! -s "$base_file" ]; then
+              echo "::error::The prepared origin/main SHA is unavailable" >&2
+              return 1
+            fi
+            expected_base="$(tr -d '[:space:]' < "$base_file")"
+            git fetch --no-tags origin main
+            actual_base="$(git rev-parse origin/main)"
+            if [ "$actual_base" != "$expected_base" ]; then
+              echo "::error::origin/main changed from $expected_base to $actual_base before auto-merge" >&2
+              return 1
+            fi
+          }
+
+          verify_pr_identity() {
+            candidate="$1"
+            if ! details="$(
+              gh pr view "$candidate" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json number,isCrossRepository,baseRefName,baseRefOid,headRefName,headRefOid
+            )"; then
+              echo "::error::Could not inspect PR #$candidate before auto-merge" >&2
+              return 1
+            fi
+            if ! jq -e \
+              --argjson number "$candidate" \
+              --arg branch "$UPDATE_BRANCH" \
+              --arg expected_base "$(tr -d '[:space:]' < "$RUNNER_TEMP/nixslop-update-base-sha")" \
+              --arg expected_head "$expected_head" \
+              '.number == $number and
+               .isCrossRepository == false and
+               .baseRefName == "main" and
+               .baseRefOid == $expected_base and
+               .headRefName == $branch and
+               .headRefOid == $expected_head' \
+              <<< "$details" >/dev/null; then
+              echo "::error::Refusing auto-merge for a PR outside the exact same-repository update boundary" >&2
+              return 1
+            fi
+          }
+
+          pr_number="$(tr -d '[:space:]' < "$RUNNER_TEMP/nixslop-update-pr-number")"
+          verify_base_unchanged
+          verify_pr_identity "$pr_number"
+          gh pr merge "$pr_number" \
+            --repo "$GITHUB_REPOSITORY" \
+            --auto \
+            --squash \
+            --match-head-commit "$expected_head"
+
+      - name: Wait for pull request merge
+        id: wait_for_merge
+        if: steps.detect_changes.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr_number="$(tr -d '[:space:]' < "$RUNNER_TEMP/nixslop-update-pr-number")"
+          base_file="$RUNNER_TEMP/nixslop-update-base-sha"
+          head_file="$RUNNER_TEMP/nixslop-update-head-sha"
+          if [ ! -s "$base_file" ] || [ ! -s "$head_file" ]; then
+            echo "::error::The validated base/head SHA is unavailable while polling"
+            exit 1
+          fi
+          expected_base="$(tr -d '[:space:]' < "$base_file")"
+          expected_head="$(tr -d '[:space:]' < "$head_file")"
+          result="TIMEOUT"
+
+          # 240 attempts x 30 seconds = 120 minutes.
+          for attempt in $(seq 1 240); do
+            if ! details="$(
+              gh pr view "$pr_number" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json number,state,mergeStateStatus,isCrossRepository,baseRefName,baseRefOid,headRefName,headRefOid
+            )"; then
+              result="API_ERROR"
+              break
+            fi
+            if ! jq -e \
+              --argjson number "$pr_number" \
+              --arg branch "$UPDATE_BRANCH" \
+              '.number == $number and
+               .isCrossRepository == false and
+               .baseRefName == "main" and
+               .headRefName == $branch' \
+              <<< "$details" >/dev/null; then
+              echo "::error::PR #$pr_number left the exact same-repository update boundary"
+              result="IDENTITY_MISMATCH"
+              break
+            fi
+
+            pr_head="$(jq -r .headRefOid <<< "$details")"
+            if [ "$pr_head" != "$expected_head" ]; then
+              echo "::error::PR #$pr_number head changed from validated commit $expected_head to $pr_head"
+              result="HEAD_DRIFT"
+              break
+            fi
+
+            pr_base="$(jq -r .baseRefOid <<< "$details")"
+            if [ "$pr_base" != "$expected_base" ]; then
+              echo "::error::PR #$pr_number base changed from $expected_base to $pr_base while it was waiting"
+              result="BASE_DRIFT"
+              break
+            fi
+
+            state="$(jq -r .state <<< "$details")"
+            merge_state="$(jq -r .mergeStateStatus <<< "$details")"
+            echo "PR #$pr_number attempt $attempt/240: state=$state mergeStateStatus=$merge_state"
+
+            if [ "$state" = "MERGED" ]; then
+              result="MERGED"
+              break
+            fi
+            if [ "$state" = "CLOSED" ]; then
+              result="CLOSED"
+              break
+            fi
+
+            if ! git fetch --no-tags origin main; then
+              result="BASE_FETCH_ERROR"
+              break
+            fi
+            actual_base="$(git rev-parse origin/main)"
+            if [ "$actual_base" != "$expected_base" ]; then
+              echo "::error::origin/main changed from $expected_base to $actual_base while PR #$pr_number was waiting"
+              result="BASE_DRIFT"
+              break
+            fi
+
+            if [ "$merge_state" = "DIRTY" ]; then
+              result="DIRTY"
+              break
+            fi
+
+            sleep 30
+          done
+
+          echo "result=$result" >> "$GITHUB_OUTPUT"
+
+      - name: Quarantine every non-merged pull request
+        id: quarantine_pr
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAS_CHANGES: ${{ steps.detect_changes.outputs.has_changes }}
+          TERMINAL_RESULT: ${{ steps.wait_for_merge.outputs.result }}
+        run: |
+          verify_pr_identity() {
+            candidate="$1"
+            if ! details="$(
+              gh pr view "$candidate" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json number,state,autoMergeRequest,isCrossRepository,baseRefName,baseRefOid,headRefName,headRefOid
+            )"; then
+              echo "::error::Could not inspect PR #$candidate during cleanup" >&2
+              return 1
+            fi
+            if ! jq -e \
+              --argjson number "$candidate" \
+              --arg branch "$UPDATE_BRANCH" \
+              '.number == $number and
+               .isCrossRepository == false and
+               .baseRefName == "main" and
+               .headRefName == $branch' \
+              <<< "$details" >/dev/null; then
+              echo "::error::Refusing cleanup outside the exact same-repository $UPDATE_BRANCH -> main update PR" >&2
+              return 1
+            fi
+            printf '%s\n' "$details"
+          }
+
+          accept_validated_merge() {
+            merge_details="$1"
+            context="$2"
+            base_file="$RUNNER_TEMP/nixslop-update-base-sha"
+            head_file="$RUNNER_TEMP/nixslop-update-head-sha"
+            if [ ! -s "$base_file" ] || [ ! -s "$head_file" ]; then
+              echo "::error::Cannot accept a merged PR without the validated base/head SHA ($context)" >&2
+              return 1
+            fi
+            expected_base="$(tr -d '[:space:]' < "$base_file")"
+            expected_head="$(tr -d '[:space:]' < "$head_file")"
+            if ! jq -e \
+              --arg expected_base "$expected_base" \
+              --arg expected_head "$expected_head" \
+              '.baseRefOid == $expected_base and
+               .headRefOid == $expected_head' \
+              <<< "$merge_details" >/dev/null; then
+              actual_base="$(jq -r .baseRefOid <<< "$merge_details")"
+              actual_head="$(jq -r .headRefOid <<< "$merge_details")"
+              echo "::error::Merged PR failed validated commit proof ($context): base=$actual_base head=$actual_head expected_base=$expected_base expected_head=$expected_head" >&2
+              return 1
+            fi
+            : > "$merged_file"
+            echo "PR #$pr_number merged with the exact validated base/head ($context)."
+          }
+
+          pr_file="$RUNNER_TEMP/nixslop-update-pr-number"
+          merged_file="$RUNNER_TEMP/nixslop-update-merged"
+          if [ ! -s "$pr_file" ] && [ -n "${UPDATE_BRANCH:-}" ]; then
+            recovered_pr_json="$(
+              gh pr list \
+                --repo "$GITHUB_REPOSITORY" \
+                --head "$UPDATE_BRANCH" \
+                --state all \
+                --limit 100 \
+                --json number,state,updatedAt,isCrossRepository,baseRefName,baseRefOid,headRefName,headRefOid
+            )"
+            recovered_pr="$(
+              jq -r \
+                --arg branch "$UPDATE_BRANCH" \
+                '[.[] | select(
+                  .isCrossRepository == false and
+                  .baseRefName == "main" and
+                  .headRefName == $branch and
+                  .state != "MERGED"
+                )] | sort_by(.updatedAt) | reverse | .[0].number // empty' \
+                <<< "$recovered_pr_json"
+            )"
+            if [ -n "$recovered_pr" ]; then
+              printf '%s\n' "$recovered_pr" > "$pr_file"
+            fi
+          fi
+          if [ ! -s "$pr_file" ]; then
+            echo "No update PR exists to quarantine."
+            exit 0
+          fi
+
+          pr_number="$(tr -d '[:space:]' < "$pr_file")"
+          details="$(verify_pr_identity "$pr_number")"
+          state="$(jq -r .state <<< "$details")"
+
+          if [ "$state" = "MERGED" ]; then
+            if accept_validated_merge "$details" "before cleanup"; then
+              exit 0
+            fi
+            exit 1
+          fi
+
+          cleanup_failed=0
+          details="$(verify_pr_identity "$pr_number")"
+          state="$(jq -r .state <<< "$details")"
+          if [ "$state" = "MERGED" ]; then
+            if accept_validated_merge "$details" "before auto-merge cleanup"; then
+              exit 0
+            fi
+            exit 1
+          fi
+          if ! gh pr merge "$pr_number" \
+            --repo "$GITHUB_REPOSITORY" \
+            --disable-auto; then
+            details="$(verify_pr_identity "$pr_number")"
+            state="$(jq -r .state <<< "$details")"
+            if [ "$state" = "MERGED" ]; then
+              if accept_validated_merge "$details" "during auto-merge cleanup"; then
+                exit 0
+              fi
+              exit 1
+            fi
+            auto_merge_active="$(jq -r '.autoMergeRequest != null' <<< "$details")"
+            if [ "$auto_merge_active" != "false" ]; then
+              echo "::error::Could not disable auto-merge for PR #$pr_number"
+              cleanup_failed=1
+            fi
+          fi
+
+          if ! gh label create update-quarantined \
+            --repo "$GITHUB_REPOSITORY" \
+            --color b60205 \
+            --description "Automation stopped before merge" \
+            --force; then
+            echo "::error::Could not ensure the quarantine label"
+            cleanup_failed=1
+          fi
+
+          details="$(verify_pr_identity "$pr_number")"
+          state="$(jq -r .state <<< "$details")"
+          if [ "$state" = "MERGED" ]; then
+            if accept_validated_merge "$details" "before quarantine labeling"; then
+              exit 0
+            fi
+            exit 1
+          fi
+          if ! gh pr edit "$pr_number" \
+            --repo "$GITHUB_REPOSITORY" \
+            --add-label update-quarantined; then
+            echo "::error::Could not quarantine PR #$pr_number"
+            cleanup_failed=1
+          fi
+
+          details="$(verify_pr_identity "$pr_number")"
+          state="$(jq -r .state <<< "$details")"
+          if [ "$state" = "MERGED" ]; then
+            if accept_validated_merge "$details" "before quarantine comment"; then
+              exit 0
+            fi
+            exit 1
+          elif [ "$state" = "OPEN" ]; then
+            if [ -n "$TERMINAL_RESULT" ]; then
+              reason="$TERMINAL_RESULT"
+            elif [ "$HAS_CHANGES" = "false" ]; then
+              reason="NO_CHANGES"
+            else
+              reason="WORKFLOW_FAILURE"
+            fi
+            verify_pr_identity "$pr_number" >/dev/null
+            if ! gh pr comment "$pr_number" \
+              --repo "$GITHUB_REPOSITORY" \
+              --body "Update automation quarantined this PR after terminal result: \`$reason\`."; then
+              echo "::error::Could not record the cleanup reason on PR #$pr_number"
+              cleanup_failed=1
+            fi
+
+            details="$(verify_pr_identity "$pr_number")"
+            state="$(jq -r .state <<< "$details")"
+            if [ "$state" = "MERGED" ]; then
+              if accept_validated_merge "$details" "before quarantine close"; then
+                exit 0
+              fi
+              exit 1
+            elif [ "$state" = "OPEN" ] && \
+              ! gh pr close "$pr_number" --repo "$GITHUB_REPOSITORY"; then
+              echo "::error::Could not close PR #$pr_number"
+              cleanup_failed=1
+            elif [ "$state" != "OPEN" ] && [ "$state" != "CLOSED" ]; then
+              echo "::error::Unexpected cleanup state before close for PR #$pr_number: $state"
+              cleanup_failed=1
+            fi
+          elif [ "$state" != "CLOSED" ]; then
+            echo "::error::Unexpected cleanup state for PR #$pr_number: $state"
+            cleanup_failed=1
+          fi
+
+          if ! details="$(verify_pr_identity "$pr_number")"; then
+            echo "::error::Could not verify final state for PR #$pr_number"
+            cleanup_failed=1
+          else
+            final_state="$(jq -r .state <<< "$details")"
+            if [ "$final_state" = "MERGED" ]; then
+              if accept_validated_merge "$details" "before final cleanup verification"; then
+                exit 0
+              fi
+              exit 1
+            elif [ "$final_state" != "CLOSED" ]; then
+              echo "::error::PR #$pr_number was not proven closed"
+              cleanup_failed=1
+            fi
+          fi
+
+          exit "$cleanup_failed"
+
+      - name: Enforce terminal update result
+        id: enforce_result
+        if: always()
+        env:
+          HAS_CHANGES: ${{ steps.detect_changes.outputs.has_changes }}
+          TERMINAL_RESULT: ${{ steps.wait_for_merge.outputs.result }}
+        run: |
+          if [ "$HAS_CHANGES" != "true" ]; then
+            echo "The fixed updater found no changes."
+            exit 0
+          fi
+          if [ "$TERMINAL_RESULT" = "MERGED" ] \
+            || [ -f "$RUNNER_TEMP/nixslop-update-merged" ]; then
+            echo "The update PR reached MERGED."
+            exit 0
+          fi
+
+          echo "::error::Update ended without MERGED (result: ${TERMINAL_RESULT:-WORKFLOW_FAILURE})"
+          exit 1
