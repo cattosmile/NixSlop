@@ -17,7 +17,10 @@ let
 
   evalNixos =
     module: serviceConfig: extraModules:
-    (import "${pkgs.path}/nixos/lib/eval-config.nix" {
+    # Keep the nixpkgs source as a path value. String interpolation copies the
+    # source to a second store path during fresh CI evaluation and can leave an
+    # unrealised path context behind.
+    (import (pkgs.path + "/nixos/lib/eval-config.nix") {
       inherit pkgs system;
       modules = [
         module
