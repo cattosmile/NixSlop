@@ -1,6 +1,7 @@
 --- a/computer-use-linux/src/windowing/registry.rs
 +++ b/computer-use-linux/src/windowing/registry.rs
 @@ -44,11 +44,11 @@
+ }
  
  const BACKEND_ORDER: &[BackendKind] = &[
 +    BackendKind::Hyprland,
@@ -27,7 +28,6 @@
          )),
      }
  }
-@@ -261,10 +263,12 @@
  
  pub async fn resize_window(window: &WindowInfo, width: i32, height: i32) -> Result<String> {
      match window.backend.as_str() {
