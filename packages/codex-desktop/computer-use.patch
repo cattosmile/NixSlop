@@ -1,6 +1,8 @@
 --- a/computer-use-linux/src/windowing/registry.rs
 +++ b/computer-use-linux/src/windowing/registry.rs
-@@ -46,11 +46,11 @@
+@@ -45,12 +45,12 @@
+ 
+ }
  
  const BACKEND_ORDER: &[BackendKind] = &[
 +    BackendKind::Hyprland,
@@ -12,6 +14,8 @@
      BackendKind::Niri,
      BackendKind::I3,
      // Generic X11/EWMH: last, so a session-native backend always wins first.
+     BackendKind::X11,
+ ];
 --- a/computer-use-linux/src/windowing/registry.rs
 +++ b/computer-use-linux/src/windowing/registry.rs
 @@ -250,24 +250,26 @@
