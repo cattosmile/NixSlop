@@ -1,7 +1,6 @@
 --- a/computer-use-linux/src/windowing/registry.rs
 +++ b/computer-use-linux/src/windowing/registry.rs
 @@ -44,11 +44,11 @@
- }
  
  const BACKEND_ORDER: &[BackendKind] = &[
 +    BackendKind::Hyprland,
@@ -13,7 +12,7 @@
      BackendKind::Niri,
      BackendKind::I3,
      // Generic X11/EWMH: last, so a session-native backend always wins first.
-@@ -250,24 +250,26 @@
+@@ -250,10 +250,12 @@
  
  pub async fn move_window(window: &WindowInfo, x: i32, y: i32) -> Result<String> {
      match window.backend.as_str() {
@@ -28,6 +27,7 @@
          )),
      }
  }
+@@ -261,10 +263,12 @@
  
  pub async fn resize_window(window: &WindowInfo, width: i32, height: i32) -> Result<String> {
      match window.backend.as_str() {
@@ -44,8 +44,8 @@
  }
 --- a/computer-use-linux/src/windowing/backends/hyprland.rs
 +++ b/computer-use-linux/src/windowing/backends/hyprland.rs
-@@ -246,6 +246,63 @@
-     output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "ok"
+@@ -264,6 +264,63 @@
+     format!("hl.dsp.focus({{ window = \"{address}\" }})")
  }
  
 +pub async fn move_window(window_id: u64, x: i32, y: i32) -> Result<String> {
