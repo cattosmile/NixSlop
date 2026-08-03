@@ -92,7 +92,54 @@
  function clientTypeName(value) {
 --- a/computer-use-linux/src/diagnostics.rs
 +++ b/computer-use-linux/src/diagnostics.rs
-@@ -81,8 +81,9 @@
+@@ -1,6 +1,6 @@
+ use crate::windowing::registry::{
+     self, COSMIC_WAYLAND_BACKEND, GNOME_SHELL_EXTENSION_BACKEND, GNOME_SHELL_INTROSPECT_BACKEND,
+-    HYPRLAND_BACKEND, I3_BACKEND, KWIN_BACKEND, NIRI_BACKEND, X11_BACKEND,
++    HYPRLAND_BACKEND, KWIN_BACKEND, NIRI_BACKEND,
+ };
+ use crate::ydotool;
+ use schemars::JsonSchema;
+@@ -9,7 +9,10 @@
+     collections::{BTreeMap, HashMap},
+     env, fs,
+     fs::OpenOptions,
+-    os::unix::{fs::MetadataExt, net::UnixDatagram},
++    os::unix::{
++        fs::MetadataExt,
++        net::{UnixDatagram, UnixStream},
++    },
+     path::{Path, PathBuf},
+     process::Command,
+ };
+@@ -28,26 +31,6 @@
+     "XDG_RUNTIME_DIR",
+     "XDG_SESSION_TYPE",
+ ];
+-const FORCE_YDOTOOL_KEYBOARD_ENV_KEYS: &[&str] = &[
+-    "COMPUTER_USE_LINUX_FORCE_YDOTOOL_KEYBOARD",
+-    "CODEX_COMPUTER_USE_FORCE_YDOTOOL_KEYBOARD",
+-];
+-const FORCE_YDOTOOL_POINTER_ENV_KEYS: &[&str] = &[
+-    "COMPUTER_USE_LINUX_FORCE_YDOTOOL_POINTER",
+-    "CODEX_COMPUTER_USE_FORCE_YDOTOOL_POINTER",
+-];
+-const FORCE_XDOTOOL_KEYBOARD_ENV_KEYS: &[&str] = &[
+-    "COMPUTER_USE_LINUX_FORCE_XDOTOOL_KEYBOARD",
+-    "CODEX_COMPUTER_USE_FORCE_XDOTOOL_KEYBOARD",
+-];
+-const FORCE_PORTAL_KEYBOARD_ENV_KEYS: &[&str] = &[
+-    "COMPUTER_USE_LINUX_FORCE_PORTAL_KEYBOARD",
+-    "CODEX_COMPUTER_USE_FORCE_PORTAL_KEYBOARD",
+-];
+-const FORCE_PORTAL_POINTER_ENV_KEYS: &[&str] = &[
+-    "COMPUTER_USE_LINUX_FORCE_PORTAL_POINTER",
+-    "CODEX_COMPUTER_USE_FORCE_PORTAL_POINTER",
+-];
+ 
+ #[derive(Debug, Clone, Serialize, JsonSchema)]
+ pub struct DoctorReport {
+@@ -98,8 +81,9 @@
      pub xauthority: Option<String>,
      pub dbus_session_bus_address: Option<String>,
      pub xdg_runtime_dir: Option<String>,
@@ -104,7 +151,7 @@
  }
  
  #[derive(Debug, Clone, Serialize, JsonSchema)]
-@@ -108,7 +109,6 @@
+@@ -125,7 +109,6 @@
  pub struct WindowingReport {
      pub gnome_shell_introspect: Check,
      pub codex_gnome_shell_extension: Check,
@@ -112,8 +159,43 @@
      pub cosmic_helper: Check,
      pub kwin: Check,
      pub hyprland: Check,
-@@ -217,18 +217,11 @@
+@@ -143,9 +126,6 @@
+     pub ydotoold: Check,
+     pub ydotool_socket: Check,
+     pub uinput: Check,
+-    /// X11 XTEST keyboard backend. Preferred over ydotool on X11 sessions,
+-    /// where raw evdev scancodes are re-mapped by the active XKB layout.
+-    pub xdotool: Check,
+ }
+ 
+ #[derive(Debug, Clone, Serialize, JsonSchema)]
+@@ -229,84 +209,39 @@
+     if input.uinput.ok {
+         input_backends.push("abs_pointer".to_string());
      }
+-    let force_ydotool = env_flag_enabled_any(FORCE_YDOTOOL_KEYBOARD_ENV_KEYS);
+-    let force_xdotool = env_flag_enabled_any(FORCE_XDOTOOL_KEYBOARD_ENV_KEYS);
+-    let portal_available = portal_input_available(platform, portals);
+-    let portal_forced_for_all_input = force_portal_for_all_input(
+-        env_flag_enabled_any(FORCE_PORTAL_POINTER_ENV_KEYS),
+-        env_flag_enabled_any(FORCE_PORTAL_KEYBOARD_ENV_KEYS),
+-        env_flag_enabled_any(FORCE_YDOTOOL_POINTER_ENV_KEYS),
+-        force_ydotool,
+-    );
+-    if should_advertise_xdotool(platform, input, force_ydotool, force_xdotool) {
+-        input_backends.push("xdotool".to_string());
+-    }
+-    if portal_available && portal_forced_for_all_input {
++    if portals.remote_desktop.ok {
+         input_backends.push("portal".to_string());
+     }
+-    if input.ydotool.ok && input.ydotool_socket.ok {
++    if input.ydotool.ok && input.ydotoold.ok && input.ydotool_socket.ok {
+         input_backends.push("ydotool".to_string());
+     }
+-    if portal_available && !portal_forced_for_all_input {
+-        input_backends.push("portal".to_string());
+-    }
  
      let mut screenshot_backends = Vec::new();
 -    if platform.gnome_shell_version.ok {
@@ -126,14 +208,66 @@
      }
      if portals.screenshot.ok {
          screenshot_backends.push("portal".to_string());
--    }
+     }
 -    // Subprocess fallback for background/systemd contexts the DBus paths reject.
 -    if platform.gnome_screenshot.ok {
 -        screenshot_backends.push("gnome_screenshot".to_string());
-     }
+-    }
  
      let mut window_backends = Vec::new();
-@@ -256,13 +249,9 @@
+-    let x11_available = windowing
+-        .backends
+-        .get(X11_BACKEND)
+-        .is_some_and(|check| check.ok);
+-    let prefer_x11_over_introspect = windowing.gnome_shell_introspect.ok
+-        && x11_available
+-        && registry::backend_can_exact_focus(X11_BACKEND);
+     if windowing.codex_gnome_shell_extension.ok {
+         window_backends.push("gnome_shell_extension".to_string());
+     }
+-    if prefer_x11_over_introspect {
+-        window_backends.push(X11_BACKEND.to_string());
+-    }
+     if windowing.gnome_shell_introspect.ok {
+         window_backends.push("gnome_introspect".to_string());
+     }
++    if windowing.kwin.ok {
++        window_backends.push("kwin".to_string());
++    }
++    if windowing.hyprland.ok {
++        window_backends.push("hyprland".to_string());
++    }
++    if windowing.niri.ok {
++        window_backends.push(NIRI_BACKEND.to_string());
++    }
+     if windowing.cosmic_helper.ok {
+         window_backends.push("cosmic".to_string());
+-    }
+-    if windowing.kwin.ok {
+-        window_backends.push("kwin".to_string());
+-    }
+-    if windowing.hyprland.ok {
+-        window_backends.push("hyprland".to_string());
+-    }
+-    if windowing.niri.ok {
+-        window_backends.push(NIRI_BACKEND.to_string());
+-    }
+-    // i3 and the generic X11/EWMH backend have no dedicated WindowingReport
+-    // field; read them from the probe map (tried last) so the capability list
+-    // matches the backends the registry will actually use.
+-    if windowing
+-        .backends
+-        .get(I3_BACKEND)
+-        .is_some_and(|check| check.ok)
+-    {
+-        window_backends.push(I3_BACKEND.to_string());
+-    }
+-    if x11_available && !prefer_x11_over_introspect {
+-        window_backends.push(X11_BACKEND.to_string());
+     }
+ 
+     let mut accessibility_backends = Vec::new();
+@@ -314,13 +249,9 @@
          accessibility_backends.push("at_spi".to_string());
      }
  
@@ -150,7 +284,7 @@
  
      let preferred = PreferredBackends {
          input: input_backends.first().cloned(),
-@@ -310,12 +299,24 @@
+@@ -368,12 +299,24 @@
      let mut entries = env::var_os("PATH")
          .map(|path| env::split_paths(&path).collect::<Vec<_>>())
          .unwrap_or_default();
@@ -181,7 +315,7 @@
          let path = PathBuf::from(path);
          if path.exists() && !entries.iter().any(|entry| entry == &path) {
              entries.push(path);
-@@ -324,6 +325,45 @@
+@@ -382,6 +325,45 @@
      if let Ok(path) = env::join_paths(entries) {
          env::set_var("PATH", path);
      }
@@ -227,7 +361,7 @@
  }
  
  fn hydrate_desktop_env_from_process_tree() {
-@@ -481,19 +521,7 @@
+@@ -539,19 +521,7 @@
                  "true",
              ],
          );
@@ -248,7 +382,7 @@
      };
      let after = doctor_report();
      let before_ready = before.readiness.can_build_accessibility_tree;
-@@ -507,7 +535,7 @@
+@@ -565,7 +535,7 @@
              "AT-SPI accessibility is ready."
          }
      } else {
@@ -257,7 +391,7 @@
      }
      .to_string();
  
-@@ -533,8 +561,7 @@
+@@ -591,8 +561,7 @@
          xauthority: env_var("XAUTHORITY"),
          dbus_session_bus_address: dbus_session_address(),
          xdg_runtime_dir: xdg_runtime_dir().map(|path| path.display().to_string()),
@@ -267,7 +401,7 @@
      }
  }
  
-@@ -553,13 +580,8 @@
+@@ -611,13 +580,8 @@
  fn accessibility_report() -> AccessibilityReport {
      AccessibilityReport {
          at_spi_bus: atspi_bus_address_check(),
@@ -283,7 +417,7 @@
          ),
          at_spi_enabled: atspi_status_property_check("IsEnabled"),
          screen_reader_enabled: atspi_status_property_check("ScreenReaderEnabled"),
-@@ -577,11 +599,6 @@
+@@ -635,11 +599,6 @@
      };
      let gnome_shell_introspect = backend_check(GNOME_SHELL_INTROSPECT_BACKEND);
      let codex_gnome_shell_extension = backend_check(GNOME_SHELL_EXTENSION_BACKEND);
@@ -295,7 +429,27 @@
      let cosmic_helper = backend_check(COSMIC_WAYLAND_BACKEND);
      let kwin = backend_check(KWIN_BACKEND);
      let hyprland = backend_check(HYPRLAND_BACKEND);
-@@ -613,7 +630,6 @@
+@@ -652,9 +611,7 @@
+     let can_focus_apps = probes.iter().any(|probe| probe.can_focus_apps);
+     let can_focus_windows = probes.iter().any(|probe| probe.can_focus_windows);
+     let note = if can_list_windows {
+-        if !can_focus_windows {
+-            "A window listing backend is available for list_windows, but focused-window and targeted-input verification are unavailable (for example wmctrl is present but xprop is missing on X11)."
+-        } else if cosmic_helper.ok && is_cosmic_wayland_platform(platform) {
++        if cosmic_helper.ok && is_cosmic_wayland_platform(platform) {
+             "A COSMIC Wayland window backend is available for list_windows, focused_window, and targeted input verification."
+         } else if kwin.ok {
+             "A KWin/Plasma window backend is available for list_windows, focused_window, and targeted input verification."
+@@ -663,7 +620,7 @@
+         } else if niri.ok {
+             "A Niri window backend is available for list_windows, focused_window, and targeted input verification."
+         } else {
+-            "A window listing backend is available for list_windows, focused_window, and targeted input verification."
++            "A GNOME window listing backend is available for list_windows, focused_window, and targeted input verification."
+         }
+     } else {
+         "Window listing is unavailable or denied. Computer Use can still use screenshots, AT-SPI, and global ydotool input, but targeted window input cannot be verified. On GNOME, run setup_window_targeting to install the optional GNOME Shell extension backend. On COSMIC, ensure the bundled COSMIC helper is present and can connect to the session. On KDE/Plasma, ensure KWin exposes org.kde.KWin scripting on the session bus. On Hyprland, ensure hyprctl is available in the session. On Niri, ensure NIRI_SOCKET is available and niri msg can reach the active compositor."
+@@ -673,7 +630,6 @@
      WindowingReport {
          gnome_shell_introspect,
          codex_gnome_shell_extension,
@@ -303,7 +457,27 @@
          cosmic_helper,
          kwin,
          hyprland,
-@@ -662,7 +678,7 @@
+@@ -697,13 +653,12 @@
+ fn input_report() -> InputReport {
+     InputReport {
+         ydotool: match ydotool::ensure_supported() {
+-            Ok(support) => Check::ok(support.detail),
++            Ok(detail) => Check::ok(detail),
+             Err(detail) => Check::fail(detail),
+         },
+         ydotoold: process_check("ydotoold"),
+         ydotool_socket: ydotool_socket_check(),
+         uinput: read_write_path_check(Path::new("/dev/uinput")),
+-        xdotool: command_path_check("xdotool"),
+     }
+ }
+ 
+@@ -719,11 +674,11 @@
+     let can_query_windows = windowing.can_list_windows;
+     let can_focus_apps = windowing.can_focus_apps;
+     let can_focus_windows = windowing.can_focus_windows;
+-    let can_send_development_input = can_send_development_input(platform, portals, input);
++    let can_send_development_input = can_send_development_input(portals, input);
  
      if !can_build_accessibility_tree {
          blockers.push(
@@ -312,7 +486,50 @@
                  .to_string(),
          );
      }
-@@ -778,9 +794,11 @@
+@@ -746,7 +701,7 @@
+ 
+     if !can_send_development_input {
+         blockers.push(
+-            "Development input is unavailable; enable read/write /dev/uinput, XDG RemoteDesktop portal input on Wayland, xdotool with DISPLAY on X11, or ydotool with a connectable ydotoold socket."
++            "Development input is unavailable; enable read/write /dev/uinput, XDG RemoteDesktop portal input, or ydotool with a connectable ydotoold socket."
+                 .to_string(),
+         );
+     }
+@@ -766,7 +721,7 @@
+     } else if !can_focus_windows {
+         "Enable an exact-focus window backend before using window_id, title, or terminal-targeted input.".to_string()
+     } else if !can_send_development_input {
+-        "Enable a supported input backend: grant read/write /dev/uinput, enable the XDG RemoteDesktop portal on Wayland, install xdotool for X11, or start ydotoold with a socket accessible to this desktop user."
++        "Enable a supported input backend: grant read/write /dev/uinput, enable the XDG RemoteDesktop portal, or start ydotoold with a socket accessible to this desktop user."
+             .to_string()
+     } else {
+         "Computer Use is ready: AT-SPI tree support, window targeting, and a Linux input backend are available."
+@@ -785,21 +740,10 @@
+     }
+ }
+ 
+-fn can_send_development_input(
+-    platform: &PlatformReport,
+-    portals: &PortalReport,
+-    input: &InputReport,
+-) -> bool {
+-    let force_ydotool = env_flag_enabled_any(FORCE_YDOTOOL_KEYBOARD_ENV_KEYS);
+-    let force_xdotool = env_flag_enabled_any(FORCE_XDOTOOL_KEYBOARD_ENV_KEYS);
++fn can_send_development_input(portals: &PortalReport, input: &InputReport) -> bool {
+     input.uinput.ok
+-        || portal_input_available(platform, portals)
+-        || should_advertise_xdotool(platform, input, force_ydotool, force_xdotool)
+-        || input.ydotool.ok && input.ydotool_socket.ok
+-}
+-
+-fn portal_input_available(platform: &PlatformReport, portals: &PortalReport) -> bool {
+-    platform_is_wayland(platform) && portals.remote_desktop.ok
++        || portals.remote_desktop.ok
++        || input.ydotool.ok && input.ydotoold.ok && input.ydotool_socket.ok
+ }
+ 
+ fn is_cosmic_wayland_platform(platform: &PlatformReport) -> bool {
+@@ -850,9 +794,11 @@
          candidates.push(PathBuf::from(value));
      }
  
@@ -327,7 +544,84 @@
      candidates.push(PathBuf::from("/tmp/.ydotool_socket"));
      candidates
  }
-@@ -933,27 +951,6 @@
+@@ -881,52 +827,6 @@
+         .filter(|value| !value.is_empty())
+ }
+ 
+-fn command_path_check(command: &str) -> Check {
+-    command_check("sh", &["-c", &format!("command -v {command}")])
+-}
+-
+-fn platform_is_wayland(platform: &PlatformReport) -> bool {
+-    match platform.xdg_session_type.as_deref() {
+-        Some(value) => value.eq_ignore_ascii_case("wayland"),
+-        None => platform
+-            .wayland_display
+-            .as_deref()
+-            .is_some_and(|display| !display.trim().is_empty()),
+-    }
+-}
+-
+-fn should_advertise_xdotool(
+-    platform: &PlatformReport,
+-    input: &InputReport,
+-    force_ydotool: bool,
+-    force_xdotool: bool,
+-) -> bool {
+-    !force_ydotool
+-        && input.xdotool.ok
+-        && platform
+-            .display
+-            .as_deref()
+-            .is_some_and(|display| !display.trim().is_empty())
+-        && (force_xdotool || !platform_is_wayland(platform))
+-}
+-
+-fn env_flag_enabled_any(keys: &[&str]) -> bool {
+-    keys.iter()
+-        .any(|key| env::var(key).ok().as_deref() == Some("1"))
+-}
+-
+-fn force_portal_for_all_input(
+-    force_portal_pointer: bool,
+-    force_portal_keyboard: bool,
+-    force_ydotool_pointer: bool,
+-    force_ydotool_keyboard: bool,
+-) -> bool {
+-    force_portal_pointer
+-        && force_portal_keyboard
+-        && !force_ydotool_pointer
+-        && !force_ydotool_keyboard
+-}
+-
+ fn process_check(process_name: &str) -> Check {
+     command_check("pgrep", &["-a", process_name])
+ }
+@@ -944,9 +844,20 @@
+         return Err(format!("missing: {}", path.display()));
+     }
+ 
+-    UnixDatagram::unbound()
+-        .and_then(|socket| socket.connect(path))
+-        .map_err(|error| format!("{}: datagram: {error}", path.display()))
++    match UnixStream::connect(path) {
++        Ok(_) => Ok(()),
++        Err(stream_error) => {
++            match UnixDatagram::unbound().and_then(|socket| socket.connect(path)) {
++                Ok(()) => Ok(()),
++                Err(datagram_error) => Err(format!(
++                    "{}: stream: {}; datagram: {}",
++                    path.display(),
++                    stream_error,
++                    datagram_error
++                )),
++            }
++        }
++    }
+ }
+ 
+ fn read_write_path_check(path: &Path) -> Check {
+@@ -1040,27 +951,6 @@
      command_check_with_session_bus("gdbus", &command_args)
  }
  
@@ -355,7 +649,7 @@
  fn command_check(command: &str, args: &[&str]) -> Check {
      run_command(command, args, false)
  }
-@@ -963,7 +960,10 @@
+@@ -1070,7 +960,10 @@
  }
  
  fn run_command(command: &str, args: &[&str], with_session_bus: bool) -> Check {
@@ -367,7 +661,7 @@
      cmd.args(args);
  
      if with_session_bus {
-@@ -1014,8 +1014,7 @@
+@@ -1121,8 +1014,7 @@
              xauthority: Some("/run/user/1000/Xauthority".to_string()),
              dbus_session_bus_address: Some("unix:path=/run/user/1000/bus".to_string()),
              xdg_runtime_dir: Some("/run/user/1000".to_string()),
@@ -377,7 +671,7 @@
          }
      }
  
-@@ -1051,11 +1050,6 @@
+@@ -1158,11 +1050,6 @@
                  Check::fail("denied")
              },
              codex_gnome_shell_extension: if can_focus_windows {
@@ -389,6 +683,208 @@
                  Check::ok("ok")
              } else {
                  Check::fail("missing")
+@@ -1199,7 +1086,6 @@
+             ydotoold,
+             ydotool_socket,
+             uinput,
+-            xdotool: Check::fail("missing xdotool"),
+         }
+     }
+ 
+@@ -1282,145 +1168,6 @@
+         assert!(process_env_has_graphical_display(&with_display));
+         assert!(process_env_has_graphical_display(&with_wayland));
+         assert!(!process_env_has_graphical_display(&without_display));
+-    }
+-
+-    #[test]
+-    fn capabilities_prefer_xdotool_before_ydotool_on_x11() {
+-        let mut platform = platform_report();
+-        platform.xdg_session_type = Some("x11".to_string());
+-        platform.wayland_display = None;
+-        platform.display = Some(":0".to_string());
+-        let input = InputReport {
+-            ydotool: Check::ok("ydotool"),
+-            ydotoold: Check::ok("ydotoold"),
+-            ydotool_socket: Check::ok("connectable"),
+-            uinput: Check::fail("missing"),
+-            xdotool: Check::ok("xdotool"),
+-        };
+-
+-        let capabilities = capability_map(
+-            &platform,
+-            &portal_report(Check::fail("missing")),
+-            &accessibility_report(Check::fail("missing"), Check::fail("missing")),
+-            &windowing_report(false, false),
+-            &input,
+-        );
+-
+-        assert_eq!(capabilities.input, ["xdotool", "ydotool"]);
+-        assert_eq!(capabilities.preferred.input.as_deref(), Some("xdotool"));
+-    }
+-
+-    #[test]
+-    fn x11_diagnostics_ignore_portal_and_accept_xdotool() {
+-        let mut platform = platform_report();
+-        platform.xdg_session_type = Some("x11".to_string());
+-        platform.wayland_display = None;
+-        platform.display = Some(":0".to_string());
+-        let portals = portal_report(Check::ok("org.freedesktop.portal.RemoteDesktop"));
+-        let accessibility = accessibility_report(Check::ok("bus"), Check::ok("true"));
+-        let windowing = windowing_report(true, true);
+-        let mut input = input_report(false);
+-        input.xdotool = Check::ok("xdotool");
+-
+-        let capabilities = capability_map(&platform, &portals, &accessibility, &windowing, &input);
+-        let readiness = readiness_report(&platform, &portals, &accessibility, &windowing, &input);
+-
+-        assert_eq!(capabilities.input, ["xdotool"]);
+-        assert_eq!(capabilities.preferred.input.as_deref(), Some("xdotool"));
+-        assert!(readiness.can_send_development_input);
+-    }
+-
+-    #[test]
+-    fn wayland_diagnostics_prefer_ydotool_before_portal() {
+-        let platform = platform_report();
+-        let portals = portal_report(Check::ok("org.freedesktop.portal.RemoteDesktop"));
+-        let accessibility = accessibility_report(Check::ok("bus"), Check::ok("true"));
+-        let windowing = windowing_report(true, true);
+-        let input = input_report_parts(
+-            Check::ok("ydotool"),
+-            Check::ok("ydotoold"),
+-            Check::ok("connectable"),
+-            Check::fail("missing uinput"),
+-        );
+-
+-        let capabilities = capability_map(&platform, &portals, &accessibility, &windowing, &input);
+-
+-        assert_eq!(capabilities.input, ["ydotool", "portal"]);
+-        assert_eq!(capabilities.preferred.input.as_deref(), Some("ydotool"));
+-    }
+-
+-    #[test]
+-    fn portal_force_order_requires_both_input_modalities() {
+-        assert!(force_portal_for_all_input(true, true, false, false));
+-        assert!(!force_portal_for_all_input(true, false, false, false));
+-        assert!(!force_portal_for_all_input(true, true, true, false));
+-        assert!(!force_portal_for_all_input(true, true, false, true));
+-        assert_eq!(
+-            FORCE_PORTAL_POINTER_ENV_KEYS,
+-            [
+-                "COMPUTER_USE_LINUX_FORCE_PORTAL_POINTER",
+-                "CODEX_COMPUTER_USE_FORCE_PORTAL_POINTER"
+-            ]
+-        );
+-        assert_eq!(
+-            FORCE_PORTAL_KEYBOARD_ENV_KEYS,
+-            [
+-                "COMPUTER_USE_LINUX_FORCE_PORTAL_KEYBOARD",
+-                "CODEX_COMPUTER_USE_FORCE_PORTAL_KEYBOARD"
+-            ]
+-        );
+-    }
+-
+-    #[test]
+-    fn capabilities_require_display_to_advertise_xdotool() {
+-        let mut platform = platform_report();
+-        platform.xdg_session_type = Some("x11".to_string());
+-        platform.wayland_display = None;
+-        platform.display = None;
+-        let input = InputReport {
+-            ydotool: Check::ok("ydotool"),
+-            ydotoold: Check::ok("ydotoold"),
+-            ydotool_socket: Check::ok("connectable"),
+-            uinput: Check::fail("missing"),
+-            xdotool: Check::ok("xdotool"),
+-        };
+-
+-        let capabilities = capability_map(
+-            &platform,
+-            &portal_report(Check::fail("missing")),
+-            &accessibility_report(Check::fail("missing"), Check::fail("missing")),
+-            &windowing_report(false, false),
+-            &input,
+-        );
+-
+-        assert_eq!(capabilities.input, ["ydotool"]);
+-        assert_eq!(capabilities.preferred.input.as_deref(), Some("ydotool"));
+-    }
+-
+-    #[test]
+-    fn xdotool_diagnostics_force_precedence_matches_runtime() {
+-        let mut platform = platform_report();
+-        platform.xdg_session_type = Some("wayland".to_string());
+-        platform.display = Some(":0".to_string());
+-        let mut input = input_report(false);
+-        input.xdotool = Check::ok("xdotool");
+-
+-        assert!(should_advertise_xdotool(&platform, &input, false, true));
+-        assert!(!should_advertise_xdotool(&platform, &input, true, true));
+-        assert_eq!(
+-            FORCE_XDOTOOL_KEYBOARD_ENV_KEYS,
+-            [
+-                "COMPUTER_USE_LINUX_FORCE_XDOTOOL_KEYBOARD",
+-                "CODEX_COMPUTER_USE_FORCE_XDOTOOL_KEYBOARD"
+-            ]
+-        );
+-        assert_eq!(
+-            FORCE_YDOTOOL_KEYBOARD_ENV_KEYS,
+-            [
+-                "COMPUTER_USE_LINUX_FORCE_YDOTOOL_KEYBOARD",
+-                "CODEX_COMPUTER_USE_FORCE_YDOTOOL_KEYBOARD"
+-            ]
+-        );
+     }
+ 
+     #[test]
+@@ -1565,29 +1312,6 @@
+     }
+ 
+     #[test]
+-    fn readiness_uses_connectable_ydotool_socket_when_process_probe_fails() {
+-        let platform = platform_report();
+-        let accessibility = accessibility_report(Check::ok("bus"), Check::ok("true"));
+-        let windowing = windowing_report(true, true);
+-        let input = input_report_parts(
+-            Check::ok("ydotool"),
+-            Check::fail("ydotoold process name not found"),
+-            Check::ok("connectable: /run/user/1000/.ydotool_socket"),
+-            Check::fail("/dev/uinput: Permission denied"),
+-        );
+-        let portals = portal_report(Check::fail("missing"));
+-
+-        let capabilities = capability_map(&platform, &portals, &accessibility, &windowing, &input);
+-        let readiness = readiness_report(&platform, &portals, &accessibility, &windowing, &input);
+-
+-        assert!(capabilities
+-            .input
+-            .iter()
+-            .any(|backend| backend == "ydotool"));
+-        assert!(readiness.can_send_development_input);
+-    }
+-
+-    #[test]
+     fn readiness_accepts_direct_uinput_without_connectable_ydotool_socket() {
+         let platform = platform_report();
+         let accessibility = accessibility_report(Check::ok("bus"), Check::ok("true"));
+@@ -1666,7 +1390,7 @@
+     }
+ 
+     #[test]
+-    fn ydotool_socket_check_rejects_legacy_stream_socket() {
++    fn ydotool_socket_check_requires_a_connectable_socket() {
+         let dir = std::env::temp_dir().join(format!(
+             "codex-computer-use-diagnostics-{}",
+             std::process::id()
+@@ -1679,7 +1403,7 @@
+ 
+         let check = socket_connect_check(&socket);
+ 
+-        assert!(!check.ok, "{check:?}");
++        assert!(check.ok, "{check:?}");
+         drop(listener);
+         let _ = std::fs::remove_dir_all(&dir);
+     }
 --- a/computer-use-linux/src/gnome_extension.rs
 +++ b/computer-use-linux/src/gnome_extension.rs
 @@ -1,6 +1,7 @@
@@ -405,7 +901,7 @@
      hydrate_session_bus_env();
 +
 +    if hyprland::probe().ok {
-+        let (windows, windows_error, permissions_hint) = match hyprland::list_windows() {
++        let (windows, windows_error, permissions_hint) = match hyprland::list_windows().await {
 +            Ok(windows) => (windows, None, None),
 +            Err(error) => {
 +                let error = format!("{error:#}");
@@ -883,355 +1379,18 @@
 -    }
 -}
 +}
---- a/computer-use-linux/src/server.rs
-+++ b/computer-use-linux/src/server.rs
-@@ -12,8 +12,9 @@
-     ScrollDirection,
- };
- use crate::screenshot::{
--    capture_screenshot_raw, prepare_screenshot_payload, RawScreenshotCapture, ScreenshotCapture,
--    ScreenshotOutputFormat, ScreenshotPayloadOptions,
-+    capture_screenshot_raw, capture_screenshot_region, prepare_screenshot_payload,
-+    RawScreenshotCapture, ScreenshotCapture, ScreenshotOutputFormat, ScreenshotPayloadOptions,
-+    ScreenshotRegion,
- };
- use crate::windowing::registry;
- use crate::windows::{
-@@ -22,7 +23,7 @@
-     GNOME_SHELL_INTROSPECT_BACKEND,
- };
- use crate::ydotool;
--use anyhow::Result;
-+use anyhow::{bail, Result};
- use rmcp::{
-     handler::server::wrapper::{Json, Parameters},
-     model::{CallToolResult, Content},
-@@ -93,7 +94,7 @@
- 
-     #[tool(
-         name = "setup_accessibility",
--        description = "Enable GNOME accessibility through gsettings so Linux Computer Use can read AT-SPI trees.",
-+        description = "Check and enable the compositor-neutral AT-SPI session status used for element-aware Linux Computer Use. On Hyprland this does not install or configure GNOME components.",
-         annotations(
-             read_only_hint = false,
-             destructive_hint = false,
-@@ -107,7 +108,7 @@
- 
-     #[tool(
-         name = "setup_window_targeting",
--        description = "Install and enable the optional GNOME Shell extension used for exact window list/focus targeting when GNOME blocks native introspection.",
-+        description = "Set up the optional GNOME window-targeting extension only when a GNOME session needs it. Hyprland uses native hyprctl window targeting and does not need this setup.",
-         annotations(
-             read_only_hint = false,
-             destructive_hint = false,
-@@ -361,7 +362,7 @@
- 
-     #[tool(
-         name = "screenshot",
--        description = "Capture the screen and return it as a viewable, size-bounded image. Optionally target a window (window_id/pid/wm_class/title/app_id): the window is raised to the front and the image is cropped before any resize. Returns the image plus a short caption with returned dimensions, coordinate dimensions, scale, format, quality, source, and crop bounds; callers can request jpeg/quality for compression before resizing.",
-+        description = "Capture the screen and return it as a viewable, size-bounded image. Uses native grim on Wayland/Hyprland and XDG Desktop Portal as a full-screen fallback; no GNOME screenshot service or environment variable is required. Optionally target a window (window_id/pid/wm_class/title/app_id), or pass x/y/width/height for a native area capture. Returns the image plus dimensions, coordinate dimensions, scale, format, quality, source, and crop metadata.",
-         annotations(
-             read_only_hint = false,
-             destructive_hint = false,
-@@ -373,7 +374,16 @@
-         &self,
-         Parameters(params): Parameters<ScreenshotParams>,
-     ) -> Result<CallToolResult, ErrorData> {
-+        let area = params.screenshot_region().map_err(|error| {
-+            ErrorData::invalid_params(format!("invalid screenshot area: {error}"), None)
-+        })?;
-         let target = params.window_target();
-+        if area.is_some() && target.is_some() {
-+            return Err(ErrorData::invalid_params(
-+                "screenshot area coordinates cannot be combined with a window target",
-+                None,
-+            ));
-+        }
- 
-         // When targeting a window, raise it first (so it isn't occluded) and
-         // resolve its bounds so we can crop to just that window.
-@@ -394,10 +404,14 @@
-             }
-         }
- 
--        let raw_capture = capture_screenshot_raw()
--            .await
-+        let raw_capture = match area {
-+            Some(region) => capture_screenshot_region(region).await,
-+            None => capture_screenshot_raw().await,
-+        }
-             .map_err(|e| ErrorData::internal_error(format!("screenshot failed: {e}"), None))?;
--        self.cache_desktop_size(raw_capture.width, raw_capture.height);
-+        if area.is_none() {
-+            self.cache_desktop_size(raw_capture.width, raw_capture.height);
-+        }
- 
-         // Warn when the target window extends past the visible desktop: the
-         // portal only captures on-screen pixels, so the crop silently loses the
-@@ -443,8 +457,17 @@
-             "quality": capture.quality,
-             "source": capture.source,
-             "cropped_to_window": cropped,
-+            "cropped_to_area": area.is_some(),
-             "window_title": window_label,
-         });
-+        if let Some(region) = area {
-+            caption["area"] = serde_json::json!({
-+                "x": region.x,
-+                "y": region.y,
-+                "width": region.width,
-+                "height": region.height,
-+            });
-+        }
-         if let Some(note) = off_screen_note {
-             caption["window_off_screen"] = serde_json::json!(true);
-             caption["off_screen_note"] = serde_json::json!(note);
-@@ -1214,7 +1237,15 @@
-                 Err(_) => {}
-             }
-         }
--        if self.should_prefer_portal_keyboard_backend() {
-+        let force_ydotool_keyboard = env_flag_enabled_any(&[
-+            "COMPUTER_USE_LINUX_FORCE_YDOTOOL_KEYBOARD",
-+            "CODEX_COMPUTER_USE_FORCE_YDOTOOL_KEYBOARD",
-+        ]);
-+        let layout_sensitive_text = self.is_wayland_session()
-+            && text_contains_layout_sensitive_characters(&params.text);
-+        if self.should_prefer_portal_keyboard_backend()
-+            || !force_ydotool_keyboard && layout_sensitive_text
-+        {
-             if let Ok(keysyms) = keysyms_for_text(&params.text) {
-                 match self.ensure_portal_keyboard_session().await {
-                     Ok(Some(session)) => match type_text_with_keysyms(&session, &keysyms).await {
-@@ -1258,7 +1289,7 @@
- 
-     #[tool(
-         name = "move_window",
--        description = "Move a window to a new desktop position (frame top-left in desktop coordinates). Useful to recover windows that are partially off-screen. Requires the computer-use-linux GNOME Shell extension.",
-+        description = "Move a window to a new desktop position (frame top-left in desktop coordinates). On Hyprland this uses the native hyprctl pixel dispatcher; GNOME uses its optional extension backend.",
-         annotations(
-             read_only_hint = false,
-             destructive_hint = false,
-@@ -1272,16 +1303,15 @@
-     ) -> Json<WindowGeometryOutput> {
-         let received = Some(serde_json::json!(params.clone()));
-         let target = params.target.clone().into_target();
--        self.window_geometry_op(received, &target, |window_id| async move {
--            crate::windowing::backends::gnome::move_extension_window(window_id, params.x, params.y)
--                .await
-+        self.window_geometry_op(received, &target, move |window_id, backend| async move {
-+            registry::move_window(&backend, window_id, params.x, params.y).await
-         })
-         .await
-     }
- 
-     #[tool(
-         name = "resize_window",
--        description = "Resize a window to a new frame width/height in desktop pixels, unmaximizing it first if needed. Useful to fit a window fully on-screen. Requires the computer-use-linux GNOME Shell extension.",
-+        description = "Resize a window to a new frame width/height in desktop pixels. On Hyprland this uses the native hyprctl pixel dispatcher; GNOME uses its optional extension backend.",
-         annotations(
-             read_only_hint = false,
-             destructive_hint = false,
-@@ -1295,13 +1325,8 @@
-     ) -> Json<WindowGeometryOutput> {
-         let received = Some(serde_json::json!(params.clone()));
-         let target = params.target.clone().into_target();
--        self.window_geometry_op(received, &target, |window_id| async move {
--            crate::windowing::backends::gnome::resize_extension_window(
--                window_id,
--                params.width,
--                params.height,
--            )
--            .await
-+        self.window_geometry_op(received, &target, move |window_id, backend| async move {
-+            registry::resize_window(&backend, window_id, params.width, params.height).await
-         })
-         .await
-     }
-@@ -1314,7 +1339,7 @@
-     // can't be env!("CARGO_PKG_VERSION"); the MCP safety check (CI) fails the
-     // build if it drifts from the Cargo version.
-     version = "0.3.1-linux-alpha1",
--    instructions = "Begin every turn that uses Computer Use by calling get_app_state. If diagnostics report disabled GNOME accessibility, call setup_accessibility before asking the user to retry. Use list_windows/focused_window before targeted keyboard input. If diagnostics report windowing.can_list_windows=false on GNOME, call setup_window_targeting to install the optional GNOME Shell extension backend, then ask the user to log out and back in if the setup report says a shell reload is required. This Linux backend can capture size-bounded screenshots through GNOME Shell, the Codex GNOME Shell extension, or XDG Desktop Portal, read AT-SPI trees with action/value metadata, invoke native AT-SPI actions, set AT-SPI values or editable text, list/focus compositor windows through registered Linux window backends when the session permits it, attach best-effort terminal tty/process metadata to terminal windows, send coordinate or element-targeted click/scroll/drag input through the Wayland remote desktop portal when available, and send layout-safe literal type_text through KDE clipboard integration on Plasma Wayland or through portal keysyms on other Wayland sessions before falling back to ydotool. Screenshot results include width/height for the returned image plus coordinate_width/coordinate_height and scale for desktop coordinate conversion; request more detail with max_width, max_height, max_bytes, format=jpeg, quality, or a smaller target/crop instead of relying on unbounded screenshots. Tools with readOnlyHint=false may mutate local desktop or application state; hosts should require approval for actions that can submit, delete, send, purchase, or overwrite data. For element-targeted actions, prefer element_index from the latest get_app_state result; click, perform_action, and set_value can also use semantic role/name/text/states selectors when the target is unique. type_text and press_key accept optional window_id, pid, app_id, wm_class, title, tty, terminal_pid, terminal_command, or terminal_cwd selectors and refuse targeted input if focus cannot be verified. After targeted keyboard input, results append focused-element feedback from AT-SPI (role, name, editable) and warn when no editable element holds focus — treat that warning as the input not landing. Screenshot, click, and input results warn when the target window or coordinate is partially or fully off-screen; use move_window/resize_window (GNOME Shell extension backend) to bring a window fully on-screen before retrying. scroll accepts the same window targeting and relative coordinates as click. get_app_state returns a compact readiness block by default; pass verbose=true for the full diagnostics dump. Electron apps expose no AT-SPI tree unless launched with --force-renderer-accessibility."
-+    instructions = "Begin every turn that uses Computer Use by calling get_app_state. If diagnostics report unavailable AT-SPI, call setup_accessibility; on Hyprland this only checks the compositor-neutral accessibility bus and never installs GNOME components. Use list_windows/focused_window before targeted keyboard input. On Hyprland, native hyprctl window listing, focus, move, and resize are preferred and setup_window_targeting is a no-op. This Linux backend captures full-screen and explicit x/y/width/height areas through native grim on Wayland, with XDG Desktop Portal as a full-screen fallback; no GNOME screenshot command or screenshot environment variable is required. It reads AT-SPI trees with action/value metadata, invokes native AT-SPI actions, sets AT-SPI values or editable text, attaches best-effort terminal tty/process metadata to terminal windows, sends coordinate or element-targeted click/scroll/drag input through the Wayland remote desktop portal when available, and sends literal text through the portal or the dedicated US-mapped ydotool virtual keyboard before falling back to ydotool. The Hyprland ydotoold-virtual-device must use kb_layout=us so manual ydotool type commands and Computer Use share the same physical key mapping. Screenshot results include width/height for the returned image plus coordinate_width/coordinate_height and scale for desktop coordinate conversion; request more detail with max_width, max_height, max_bytes, format=jpeg, quality, or an explicit area instead of relying on unbounded screenshots. Tools with readOnlyHint=false may mutate local desktop or application state; hosts should require approval for actions that can submit, delete, send, purchase, or overwrite data. For element-targeted actions, prefer element_index from the latest get_app_state result; click, perform_action, and set_value can also use semantic role/name/text/states selectors when the target is unique. type_text and press_key accept optional window_id, pid, app_id, wm_class, title, tty, terminal_pid, terminal_command, or terminal_cwd selectors and refuse targeted input if focus cannot be verified. After targeted keyboard input, results append focused-element feedback from AT-SPI (role, name, editable) and warn when no editable element holds focus — treat that warning as the input not landing. Screenshot, click, and input results warn when the target window or coordinate is partially or fully off-screen; use move_window/resize_window to bring a window fully on-screen before retrying. scroll accepts the same window targeting and relative coordinates as click. get_app_state returns a compact readiness block by default; pass verbose=true for the full diagnostics dump. Electron apps expose no AT-SPI tree unless launched with --force-renderer-accessibility."
- )]
- impl ServerHandler for ComputerUseLinux {}
- 
-@@ -1546,6 +1571,17 @@
-     /// Capture the whole desktop even when a window is targeted (default false).
-     #[serde(default)]
-     full_screen: Option<bool>,
-+    /// Native desktop-coordinate area to capture with grim. All four values
-+    /// are required together; negative x/y values are valid for monitors to
-+    /// the left or above the primary output.
-+    #[serde(default)]
-+    x: Option<i32>,
-+    #[serde(default)]
-+    y: Option<i32>,
-+    #[serde(default)]
-+    width: Option<u32>,
-+    #[serde(default)]
-+    height: Option<u32>,
-     /// Maximum returned screenshot width in pixels (default 1920, hard-capped).
-     #[serde(default)]
-     max_width: Option<u32>,
-@@ -1568,6 +1604,22 @@
- }
- 
- impl ScreenshotParams {
-+    fn screenshot_region(&self) -> Result<Option<ScreenshotRegion>> {
-+        let values = [self.x.is_some(), self.y.is_some(), self.width.is_some(), self.height.is_some()];
-+        if values.iter().any(|present| *present) && values.iter().any(|present| !*present) {
-+            bail!("x, y, width, and height must be supplied together");
-+        }
-+        let Some((x, y, width, height)) = self.x.zip(self.y).zip(self.width.zip(self.height)).map(
-+            |((x, y), (width, height))| (x, y, width, height),
-+        ) else {
-+            return Ok(None);
-+        };
-+        if width == 0 || height == 0 {
-+            bail!("screenshot area width and height must be greater than zero");
-+        }
-+        Ok(Some(ScreenshotRegion { x, y, width, height }))
-+    }
-+
-     fn window_target(&self) -> Option<WindowTarget> {
-         if self.window_id.is_none()
-             && self.pid.is_none()
-@@ -2251,8 +2303,9 @@
-         }
-     }
- 
--    /// Shared move/resize plumbing: resolve the window target, run the GNOME
--    /// Shell extension operation, then re-query bounds to report the result.
-+    /// Shared move/resize plumbing: resolve the window target, run the
-+    /// compositor-native backend operation, then re-query bounds to report the
-+    /// compositor-final result.
-     async fn window_geometry_op<F, Fut>(
-         &self,
-         received: Option<serde_json::Value>,
-@@ -2260,7 +2313,7 @@
-         op: F,
-     ) -> Json<WindowGeometryOutput>
-     where
--        F: FnOnce(u64) -> Fut,
-+        F: FnOnce(u64, String) -> Fut,
-         Fut: Future<Output = Result<String>>,
-     {
-         let windows = match list_windows().await {
-@@ -2270,7 +2323,7 @@
-                 return Json(WindowGeometryOutput {
-                     ok: false,
-                     implemented: true,
--                    backend: crate::windowing::GNOME_SHELL_EXTENSION_BACKEND.to_string(),
-+                    backend: "unknown".to_string(),
-                     window: None,
-                     message: format!("Window listing failed: {error}"),
-                     permissions_hint: window_permission_hint(&error),
-@@ -2278,13 +2331,13 @@
-                 });
-             }
-         };
--        let window_id = match resolve_window_target(&windows, target) {
--            Ok(window) => window.window_id,
-+        let resolved_window = match resolve_window_target(&windows, target) {
-+            Ok(window) => window.clone(),
-             Err(error) => {
-                 return Json(WindowGeometryOutput {
-                     ok: false,
-                     implemented: true,
--                    backend: crate::windowing::GNOME_SHELL_EXTENSION_BACKEND.to_string(),
-+                    backend: "unknown".to_string(),
-                     window: None,
-                     message: format!("{error:#}"),
-                     permissions_hint: None,
-@@ -2292,7 +2345,9 @@
-                 });
-             }
-         };
--        match op(window_id).await {
-+        let window_id = resolved_window.window_id;
-+        let backend = resolved_window.backend.clone();
-+        match op(window_id, backend.clone()).await {
-             Ok(message) => {
-                 // Re-query so the caller sees the compositor-final geometry
-                 // (tiling constraints, minimum sizes, etc. may adjust it).
-@@ -2310,7 +2365,7 @@
-                 Json(WindowGeometryOutput {
-                     ok: true,
-                     implemented: true,
--                    backend: crate::windowing::GNOME_SHELL_EXTENSION_BACKEND.to_string(),
-+                    backend,
-                     window,
-                     message,
-                     permissions_hint: None,
-@@ -2322,7 +2377,7 @@
-                 Json(WindowGeometryOutput {
-                     ok: false,
-                     implemented: true,
--                    backend: crate::windowing::GNOME_SHELL_EXTENSION_BACKEND.to_string(),
-+                    backend,
-                     window: None,
-                     permissions_hint: window_permission_hint(&error),
-                     message: error,
-@@ -3461,7 +3516,9 @@
- 
- async fn run_ydotool(args: &[String]) -> std::result::Result<Output, String> {
-     ydotool::ensure_supported()?;
--    let mut command = TokioCommand::new("ydotool");
-+    let ydotool_path = crate::diagnostics::resolve_command("ydotool")
-+        .ok_or_else(|| "ydotool was not found in the desktop process PATH or Nix profiles".to_string())?;
-+    let mut command = TokioCommand::new(ydotool_path);
-     command.args(args);
-     if let Some(socket) = ydotool_socket() {
-         command.env("YDOTOOL_SOCKET", socket);
-@@ -3487,7 +3544,9 @@
- 
- async fn run_ydotool_type_text(text: &str) -> std::result::Result<Output, String> {
-     ydotool::ensure_supported()?;
--    let mut command = TokioCommand::new("ydotool");
-+    let ydotool_path = crate::diagnostics::resolve_command("ydotool")
-+        .ok_or_else(|| "ydotool was not found in the desktop process PATH or Nix profiles".to_string())?;
-+    let mut command = TokioCommand::new(ydotool_path);
-     command.args(["type", "--file", "-"]);
-     if let Some(socket) = ydotool_socket() {
-         command.env("YDOTOOL_SOCKET", socket);
-@@ -3771,8 +3830,10 @@
-         .map(PathBuf::from)
-         .or_else(|| user_id().map(|uid| PathBuf::from(format!("/run/user/{uid}"))))
-     {
-+        candidates.push(runtime.join("ydotoold/socket"));
-         candidates.push(runtime.join(".ydotool_socket"));
-     }
-+    candidates.push(PathBuf::from("/run/ydotoold/socket"));
-     candidates.push(PathBuf::from("/tmp/.ydotool_socket"));
-     candidates
- }
-@@ -3799,6 +3860,12 @@
-         _ => "0xC0",
-     }
-     .to_string()
-+}
-+
-+fn text_contains_layout_sensitive_characters(text: &str) -> bool {
-+    text.chars().any(|character| {
-+        !character.is_ascii_alphanumeric() && !matches!(character, ' ' | '\n' | '\r' | '\t')
-+    })
- }
- 
- fn key_sequence(key: &str) -> Option<Vec<String>> {
 --- a/computer-use-linux/src/windowing/registry.rs
 +++ b/computer-use-linux/src/windowing/registry.rs
-@@ -9,7 +9,7 @@
- pub use kwin::KWIN_BACKEND;
+@@ -10,7 +10,7 @@
  pub use niri::NIRI_BACKEND;
+ pub use x11::X11_BACKEND;
  
 -pub const WINDOW_PERMISSION_HINT: &str = "Computer Use could not access a supported window list backend. Targeted window input requires session-bus access plus GNOME Shell Introspect, the Codex GNOME Shell extension, the COSMIC Wayland helper, KWin/Plasma DBus scripting, Hyprland hyprctl, Niri IPC, or i3-msg. On GNOME, run setup_window_targeting to install the extension backend.";
 +pub const WINDOW_PERMISSION_HINT: &str = "Computer Use could not access a supported window list backend. On Hyprland, native targeted input uses hyprctl and setup_window_targeting is a no-op; other sessions may use their registered compositor backend.";
  
  #[derive(Debug, Clone, Copy)]
  pub struct BackendDescriptor {
-@@ -42,11 +42,11 @@
+@@ -44,11 +44,11 @@
  }
  
  const BACKEND_ORDER: &[BackendKind] = &[
@@ -1243,18 +1402,15 @@
 -    BackendKind::Hyprland,
      BackendKind::Niri,
      BackendKind::I3,
- ];
-@@ -190,6 +190,30 @@
-         I3_BACKEND => i3::activate_window(window.window_id),
-         backend => Err(anyhow!(
-             "Unsupported window backend for activation: {backend}"
-+        )),
-+    }
-+}
-+
+     // Generic X11/EWMH: last, so a session-native backend always wins first.
+@@ -272,7 +272,31 @@
+     }
+ }
+ 
+-pub async fn focused_window_override() -> Option<WindowInfo> {
 +pub async fn move_window(backend: &str, window_id: u64, x: i32, y: i32) -> Result<String> {
 +    match backend {
-+        HYPRLAND_BACKEND => hyprland::move_window(window_id, x, y),
++        HYPRLAND_BACKEND => hyprland::move_window(window_id, x, y).await,
 +        GNOME_SHELL_EXTENSION_BACKEND => {
 +            gnome::move_extension_window(window_id, x, y).await
 +        }
@@ -1266,137 +1422,105 @@
 +
 +pub async fn resize_window(backend: &str, window_id: u64, width: i32, height: i32) -> Result<String> {
 +    match backend {
-+        HYPRLAND_BACKEND => hyprland::resize_window(window_id, width, height),
++        HYPRLAND_BACKEND => hyprland::resize_window(window_id, width, height).await,
 +        GNOME_SHELL_EXTENSION_BACKEND => {
 +            gnome::resize_extension_window(window_id, width, height).await
 +        }
 +        backend => Err(anyhow!(
 +            "Window resize is not implemented for the {backend} backend"
-         )),
-     }
- }
---- a/computer-use-linux/src/windowing/backends/hyprland.rs
-+++ b/computer-use-linux/src/windowing/backends/hyprland.rs
-@@ -6,7 +6,7 @@
- use std::fs;
- use std::os::unix::fs::{FileTypeExt, MetadataExt};
- use std::path::{Path, PathBuf};
--use std::process::Command;
-+use std::process::{Command, Output};
- use std::time::SystemTime;
- 
- pub const HYPRLAND_BACKEND: &str = "hyprland";
-@@ -82,21 +82,109 @@
- }
- 
- pub fn activate_window(window_id: u64) -> Result<()> {
--    let address = format!("address:0x{window_id:x}");
--    let output = hyprctl_output(&["dispatch", "focuswindow", &address])
--        .with_context(|| format!("failed to run hyprctl dispatch focuswindow {address}"))?;
--    if output.status.success() {
--        Ok(())
--    } else {
--        bail!(
--            "hyprctl dispatch focuswindow {address} failed: {}",
--            String::from_utf8_lossy(&output.stderr).trim()
--        );
--    }
-+    let address = hyprland_window_selector(window_id);
-+    let lua_dispatch = focus_lua_dispatch(&address);
-+    let legacy_args = ["dispatch", "focuswindow", address.as_str()];
-+
-+    dispatch_with_legacy_fallback(
-+        &lua_dispatch,
-+        &legacy_args,
-+        &format!("focus window {address}"),
-+    )
++        )),
++    }
 +}
 +
-+pub fn move_window(window_id: u64, x: i32, y: i32) -> Result<String> {
++pub fn focused_window_override() -> Option<WindowInfo> {
+     cosmic::focused_window().await.ok().flatten()
+ }
+ 
+--- a/computer-use-linux/src/windowing/backends/hyprland.rs
++++ b/computer-use-linux/src/windowing/backends/hyprland.rs
+@@ -246,6 +246,63 @@
+     output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "ok"
+ }
+ 
++pub async fn move_window(window_id: u64, x: i32, y: i32) -> Result<String> {
 +    dispatch_window_pixel("move", "movewindowpixel", x, y, window_id)
++        .await
 +        .map(|()| format!("Hyprland moved window 0x{window_id:x} to {x},{y}."))
 +}
 +
-+pub fn resize_window(window_id: u64, width: i32, height: i32) -> Result<String> {
++pub async fn resize_window(window_id: u64, width: i32, height: i32) -> Result<String> {
 +    if width <= 0 || height <= 0 {
 +        bail!("Hyprland window size must be positive, got {width}x{height}");
 +    }
 +    dispatch_window_pixel("resize", "resizewindowpixel", width, height, window_id)
++        .await
 +        .map(|()| format!("Hyprland resized window 0x{window_id:x} to {width}x{height}."))
 +}
 +
-+fn dispatch_window_pixel(
++async fn dispatch_window_pixel(
 +    lua_dispatcher: &str,
 +    legacy_dispatcher: &str,
 +    x: i32,
 +    y: i32,
 +    window_id: u64,
 +) -> Result<()> {
-+    let address = hyprland_window_selector(window_id);
-+    let lua_dispatch = pixel_lua_dispatch(lua_dispatcher, x, y, &address);
-+    let legacy_parameters = format!("exact {x} {y},{address}");
-+    let legacy_args = ["dispatch", legacy_dispatcher, legacy_parameters.as_str()];
++    let address = format!("address:0x{window_id:x}");
++    let lua_dispatch = lua_pixel_dispatch(lua_dispatcher, x, y, &address);
++    let lua_output = hyprctl_output_async(&["dispatch", &lua_dispatch])
++        .await
++        .with_context(|| {
++            format!("failed to run Hyprland Lua {lua_dispatcher} dispatcher for {address}")
++        })?;
++    if dispatch_succeeded(&lua_output) {
++        return Ok(());
++    }
 +
-+    dispatch_with_legacy_fallback(
-+        &lua_dispatch,
-+        &legacy_args,
-+        &format!("{lua_dispatcher} window {address}"),
++    let legacy_parameters = format!("exact {x} {y},{address}");
++    let legacy_output =
++        hyprctl_output_async(&["dispatch", legacy_dispatcher, &legacy_parameters])
++            .await
++            .with_context(|| {
++                format!("failed to run hyprctl dispatch {legacy_dispatcher} for {address}")
++            })?;
++    if dispatch_succeeded(&legacy_output) {
++        return Ok(());
++    }
++
++    bail!(
++        "Hyprland {lua_dispatcher} failed for {address}; Lua dispatcher: {}; legacy dispatcher: {}",
++        command_detail(&lua_output),
++        command_detail(&legacy_output)
 +    )
 +}
 +
-+fn hyprland_window_selector(window_id: u64) -> String {
-+    format!("address:0x{window_id:x}")
-+}
-+
-+fn focus_lua_dispatch(address: &str) -> String {
-+    format!("hl.dsp.focus({{ window = \"{address}\" }})")
-+}
-+
-+fn pixel_lua_dispatch(dispatcher: &str, x: i32, y: i32, address: &str) -> String {
++fn lua_pixel_dispatch(dispatcher: &str, x: i32, y: i32, address: &str) -> String {
 +    format!(
 +        "hl.dsp.window.{dispatcher}({{ x = {x}, y = {y}, relative = false, window = \"{address}\" }})"
 +    )
 +}
 +
-+fn dispatch_with_legacy_fallback(
-+    lua_dispatch: &str,
-+    legacy_args: &[&str],
-+    operation: &str,
-+) -> Result<()> {
-+    let lua_output = hyprctl_output(&["dispatch", lua_dispatch])
-+        .with_context(|| format!("failed to run Hyprland Lua dispatch for {operation}"))?;
-+    if lua_output.status.success() {
-+        return Ok(());
-+    }
-+    let lua_detail = command_output_detail(&lua_output);
-+
-+    let legacy_output = hyprctl_output(legacy_args)
-+        .with_context(|| format!("failed to run legacy Hyprland dispatch for {operation}"))?;
-+    if legacy_output.status.success() {
-+        return Ok(());
-+    }
-+
-+    bail!(
-+        "Hyprland {operation} failed using Lua dispatch ({lua_detail}) and legacy dispatch ({})",
-+        command_output_detail(&legacy_output),
-+    )
-+}
-+
-+fn command_output_detail(output: &Output) -> String {
-+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-+    if !stderr.is_empty() {
-+        return stderr;
-+    }
-+
-+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-+    if !stdout.is_empty() {
-+        return stdout;
-+    }
-+
-+    output.status.to_string()
+ fn command_detail(output: &std::process::Output) -> String {
+     let stdout = String::from_utf8_lossy(&output.stdout);
+     let stderr = String::from_utf8_lossy(&output.stderr);
+@@ -266,7 +323,13 @@
  }
  
  fn hyprctl_output(args: &[&str]) -> std::io::Result<std::process::Output> {
+-    let mut command = StdCommand::new("hyprctl");
++    let hyprctl = crate::diagnostics::resolve_command("hyprctl").ok_or_else(|| {
++        std::io::Error::new(
++            std::io::ErrorKind::NotFound,
++            "hyprctl was not found in the desktop process PATH or Nix profiles",
++        )
++    })?;
++    let mut command = StdCommand::new(hyprctl);
+     let has_signature = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")
+         .ok()
+         .is_some_and(|value| !value.trim().is_empty());
+@@ -279,7 +342,13 @@
+ }
+ 
+ async fn hyprctl_output_async(args: &[&str]) -> Result<std::process::Output> {
 -    let mut command = Command::new("hyprctl");
 +    let hyprctl = crate::diagnostics::resolve_command("hyprctl").ok_or_else(|| {
 +        std::io::Error::new(
@@ -1408,43 +1532,40 @@
      let has_signature = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")
          .ok()
          .is_some_and(|value| !value.trim().is_empty());
-@@ -226,6 +314,25 @@
-         let selected = select_hyprland_instance(vec![older, newer]).unwrap();
- 
-         assert_eq!(selected.signature, "newer");
-+    }
-+
-+    #[test]
-+    fn builds_hyprland_056_lua_dispatches_with_exact_window_selectors() {
-+        let address = hyprland_window_selector(0x2a);
-+
-+        assert_eq!(address, "address:0x2a");
-+        assert_eq!(
-+            focus_lua_dispatch(&address),
-+            "hl.dsp.focus({ window = \"address:0x2a\" })"
-+        );
-+        assert_eq!(
-+            pixel_lua_dispatch("move", 22, 33, &address),
-+            "hl.dsp.window.move({ x = 22, y = 33, relative = false, window = \"address:0x2a\" })"
-+        );
-+        assert_eq!(
-+            pixel_lua_dispatch("resize", 1280, 720, &address),
-+            "hl.dsp.window.resize({ x = 1280, y = 720, relative = false, window = \"address:0x2a\" })"
-+        );
-     }
- }
- 
 --- a/computer-use-linux/src/ydotool.rs
 +++ b/computer-use-linux/src/ydotool.rs
-@@ -117,8 +117,10 @@
+@@ -241,7 +241,34 @@
+             };
+             Some(directory.join(command))
+         })
++        .chain(nix_profile_candidates(command))
+         .find(|path| executable_by_effective_user(path))
++}
++
++/// Additional lookup locations for Electron-launched processes whose PATH
++/// does not include the interactive shell's Nix profiles.
++fn nix_profile_candidates(command: &str) -> Vec<PathBuf> {
++    let mut candidates = Vec::new();
++    if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
++        candidates.extend([
++            home.join(".nix-profile/bin").join(command),
++            home.join(".local/state/nix/profile/bin").join(command),
++            home.join(".local/share/nix/profile/bin").join(command),
++        ]);
++    }
++    if let Some(user) = env::var_os("USER") {
++        candidates.push(
++            PathBuf::from("/etc/profiles/per-user")
++                .join(user)
++                .join("bin")
++                .join(command),
++        );
++    }
++    candidates.extend([
++        PathBuf::from("/run/current-system/sw/bin").join(command),
++        PathBuf::from("/run/wrappers/bin").join(command),
++    ]);
++    candidates
+ }
  
- fn probe() -> Result<String, String> {
-     let runtime_dir = env::var_os("XDG_RUNTIME_DIR");
-+    let ydotool_path = crate::diagnostics::resolve_command("ydotool")
-+        .ok_or_else(|| "ydotool was not found in the desktop process PATH or Nix profiles".to_string())?;
-     probe_with(
--        Path::new("ydotool"),
-+        &ydotool_path,
-         runtime_dir.as_deref(),
-         &env::temp_dir(),
-     )
+ fn executable_by_effective_user(path: &Path) -> bool {
