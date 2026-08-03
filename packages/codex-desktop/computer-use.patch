@@ -1,21 +1,25 @@
 --- a/computer-use-linux/gnome-shell-extension/extension.js
 +++ b/computer-use-linux/gnome-shell-extension/extension.js
-@@ -22,11 +22,6 @@
-       <arg name="ok" type="b" direction="out"/>
-       <arg name="message" type="s" direction="out"/>
+@@ -19,11 +19,6 @@
      </method>
--    <method name="CaptureScreenshot">
--      <arg name="filename" type="s" direction="in"/>
+     <method name="ActivateWindow">
+       <arg name="window_id" type="t" direction="in"/>
 -      <arg name="ok" type="b" direction="out"/>
 -      <arg name="message" type="s" direction="out"/>
 -    </method>
-     <method name="MoveWindow">
-       <arg name="window_id" type="t" direction="in"/>
-       <arg name="x" type="i" direction="in"/>
-@@ -111,58 +106,6 @@
-         }
-     }
-
+-    <method name="CaptureScreenshot">
+-      <arg name="filename" type="s" direction="in"/>
+       <arg name="ok" type="b" direction="out"/>
+       <arg name="message" type="s" direction="out"/>
+     </method>
+@@ -107,58 +102,6 @@
+             invocation.return_value(new GLib.Variant('(bs)', [
+                 false,
+                 `Activation failed: ${error.message}`,
+-            ]));
+-        }
+-    }
+-
 -    CaptureScreenshotAsync([filename], invocation) {
 -        const path = String(filename ?? '').trim();
 -        if (!this._isAllowedScreenshotPath(path)) {
@@ -64,17 +68,13 @@
 -            invocation.return_value(new GLib.Variant('(bs)', [
 -                false,
 -                `Failed to start GNOME Shell screenshot: ${error.message}`,
--            ]));
--        }
--    }
--
-     MoveWindowAsync([windowId, x, y], invocation) {
-         this._withWindow(windowId, invocation, window => {
-             // move_frame positions the frame rect (what list_windows reports).
+             ]));
+         }
+     }
 @@ -275,18 +218,6 @@
          };
      }
-
+ 
 -    _isAllowedScreenshotPath(path) {
 -        if (!path.endsWith('.png'))
 -            return false;
@@ -88,7 +88,7 @@
 -        return basename.startsWith('computer-use-linux-gnome-extension-');
 -    }
  });
-
+ 
  function clientTypeName(value) {
 --- a/computer-use-linux/src/diagnostics.rs
 +++ b/computer-use-linux/src/diagnostics.rs
@@ -102,7 +102,7 @@
 +    /// internally, so a GUI-launched MCP server does not need a session PATH.
 +    pub grim: Check,
  }
-
+ 
  #[derive(Debug, Clone, Serialize, JsonSchema)]
 @@ -108,7 +109,6 @@
  pub struct WindowingReport {
@@ -112,9 +112,9 @@
      pub cosmic_helper: Check,
      pub kwin: Check,
      pub hyprland: Check,
-@@ -217,19 +217,12 @@
+@@ -217,18 +217,11 @@
      }
-
+ 
      let mut screenshot_backends = Vec::new();
 -    if platform.gnome_shell_version.ok {
 -        screenshot_backends.push("gnome_shell".to_string());
@@ -126,18 +126,17 @@
      }
      if portals.screenshot.ok {
          screenshot_backends.push("portal".to_string());
-     }
+-    }
 -    // Subprocess fallback for background/systemd contexts the DBus paths reject.
 -    if platform.gnome_screenshot.ok {
 -        screenshot_backends.push("gnome_screenshot".to_string());
--    }
-
+     }
+ 
      let mut window_backends = Vec::new();
-     if windowing.codex_gnome_shell_extension.ok {
 @@ -256,13 +249,9 @@
          accessibility_backends.push("at_spi".to_string());
      }
-
+ 
 -    // Isolation contexts: the live shared session is always available; a headless
 -    // GNOME session is possible when gnome-shell is installed (it supports
 -    // --headless --virtual-monitor), giving the agent its own seat.
@@ -148,7 +147,7 @@
 +    // The native backend intentionally does not start or depend on a second
 +    // desktop session. The active Wayland session is the isolation boundary.
 +    let isolation = vec!["shared".to_string()];
-
+ 
      let preferred = PreferredBackends {
          input: input_backends.first().cloned(),
 @@ -310,12 +299,24 @@
@@ -182,10 +181,12 @@
          let path = PathBuf::from(path);
          if path.exists() && !entries.iter().any(|entry| entry == &path) {
              entries.push(path);
-@@ -326,6 +327,45 @@
+@@ -324,6 +325,45 @@
+     if let Ok(path) = env::join_paths(entries) {
+         env::set_var("PATH", path);
      }
- }
-
++}
++
 +/// Resolve a command from both the inherited GUI PATH and the common Nix
 +/// profile locations. Electron-launched processes often do not inherit the
 +/// interactive shell PATH, so native backends must not rely on `Command::new`
@@ -223,11 +224,9 @@
 +        PathBuf::from("/bin").join(command),
 +    ]);
 +    candidates.into_iter().find(|path| path.is_file())
-+}
-+
+ }
+ 
  fn hydrate_desktop_env_from_process_tree() {
-     for process_env in desktop_process_environments() {
-         hydrate_desktop_env_from_map(&process_env);
 @@ -481,19 +521,7 @@
                  "true",
              ],
@@ -257,7 +256,7 @@
 +        "Could not enable AT-SPI accessibility automatically. Check the accessibility_command detail and provide the compositor-neutral org.a11y.Status service before retrying."
      }
      .to_string();
-
+ 
 @@ -533,8 +561,7 @@
          xauthority: env_var("XAUTHORITY"),
          dbus_session_bus_address: dbus_session_address(),
@@ -267,7 +266,7 @@
 +        grim: command_check("grim", &["-h"]),
      }
  }
-
+ 
 @@ -553,13 +580,8 @@
  fn accessibility_report() -> AccessibilityReport {
      AccessibilityReport {
@@ -305,7 +304,7 @@
          kwin,
          hyprland,
 @@ -662,7 +678,7 @@
-
+ 
      if !can_build_accessibility_tree {
          blockers.push(
 -            "AT-SPI accessibility is disabled; enable org.a11y.Status IsEnabled or org.gnome.desktop.interface toolkit-accessibility for tree extraction."
@@ -316,13 +315,14 @@
 @@ -778,9 +794,11 @@
          candidates.push(PathBuf::from(value));
      }
-
+ 
 -    if let Some(runtime_socket) = xdg_runtime_dir().map(|runtime| runtime.join(".ydotool_socket")) {
 -        candidates.push(runtime_socket);
+-    }
 +    if let Some(runtime) = xdg_runtime_dir() {
 +        candidates.push(runtime.join("ydotoold/socket"));
 +        candidates.push(runtime.join(".ydotool_socket"));
-     }
++    }
 +    candidates.push(PathBuf::from("/run/ydotoold/socket"));
      candidates.push(PathBuf::from("/tmp/.ydotool_socket"));
      candidates
@@ -330,7 +330,7 @@
 @@ -933,27 +951,6 @@
      command_check_with_session_bus("gdbus", &command_args)
  }
-
+ 
 -fn gdbus_introspect_contains(destination: &str, object_path: &str, needle: &str) -> Check {
 -    let check = command_check_with_session_bus(
 -        "gdbus",
@@ -357,7 +357,7 @@
  }
 @@ -963,7 +960,10 @@
  }
-
+ 
  fn run_command(command: &str, args: &[&str], with_session_bus: bool) -> Check {
 -    let mut cmd = Command::new(command);
 +    let Some(command_path) = resolve_command(command) else {
@@ -365,7 +365,7 @@
 +    };
 +    let mut cmd = Command::new(command_path);
      cmd.args(args);
-
+ 
      if with_session_bus {
 @@ -1014,8 +1014,7 @@
              xauthority: Some("/run/user/1000/Xauthority".to_string()),
@@ -376,19 +376,19 @@
 +            grim: Check::ok("grim 1.4"),
          }
      }
-
-@@ -1054,11 +1053,6 @@
-                 Check::ok("ok")
-             } else {
-                 Check::fail("missing")
--            },
--            codex_gnome_shell_extension_screenshot: if can_focus_windows {
+ 
+@@ -1051,11 +1050,6 @@
+                 Check::fail("denied")
+             },
+             codex_gnome_shell_extension: if can_focus_windows {
 -                Check::ok("ok")
 -            } else {
 -                Check::fail("missing")
-             },
-             cosmic_helper: Check::fail("missing"),
-             kwin: Check::fail("not a KWin session"),
+-            },
+-            codex_gnome_shell_extension_screenshot: if can_focus_windows {
+                 Check::ok("ok")
+             } else {
+                 Check::fail("missing")
 --- a/computer-use-linux/src/gnome_extension.rs
 +++ b/computer-use-linux/src/gnome_extension.rs
 @@ -1,6 +1,7 @@
@@ -399,10 +399,11 @@
  use crate::windows::{window_permission_hint, WindowInfo};
  use schemars::JsonSchema;
  use serde::Serialize;
-@@ -35,6 +36,30 @@
+@@ -34,6 +35,30 @@
+ 
  pub async fn setup_window_targeting_report() -> WindowTargetingSetupReport {
      hydrate_session_bus_env();
-
++
 +    if hyprland::probe().ok {
 +        let (windows, windows_error, permissions_hint) = match hyprland::list_windows() {
 +            Ok(windows) => (windows, None, None),
@@ -426,14 +427,13 @@
 +            message: "Native Hyprland window targeting is available through hyprctl; this setup is a no-op and does not install GNOME files.".to_string(),
 +        };
 +    }
-+
+ 
      let extension_dir = extension_dir();
      let extension_was_enabled = gnome_extension_enabled();
-     let mut wrote_files = false;
 @@ -419,20 +444,4 @@
          )));
      }
-
+ 
 -    #[test]
 -    fn rendered_extension_exposes_screenshot_capture() {
 -        let rendered = render_extension_asset(EXTENSION_JS);
@@ -450,7 +450,8 @@
 -        assert!(rendered.contains("GLib.path_get_dirname(canonicalPath) !== tmpDir"));
 -        assert!(rendered.contains("basename.startsWith('computer-use-linux-gnome-extension-')"));
 -    }
- }
+-}
++}
 --- a/computer-use-linux/src/screenshot.rs
 +++ b/computer-use-linux/src/screenshot.rs
 @@ -1,4 +1,4 @@
@@ -459,16 +460,16 @@
  use anyhow::{anyhow, bail, Context, Result};
  use base64::{engine::general_purpose::STANDARD, Engine};
  use futures_util::StreamExt;
-@@ -143,61 +143,18 @@
+@@ -143,61 +143,17 @@
      }
  }
-
+ 
 -/// Environment variable forcing a single capture backend, skipping the
 -/// fallback chain. Accepts `gnome-shell`, `gnome-extension`, `portal`, or
 -/// `gnome-screenshot`.
 -const SCREENSHOT_BACKEND_ENV: &str = "CODEX_COMPUTER_USE_SCREENSHOT_BACKEND";
 -
- #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 -enum ScreenshotBackend {
 -    GnomeShell,
 -    GnomeExtension,
@@ -501,10 +502,10 @@
 +    pub width: u32,
 +    pub height: u32,
  }
-
+ 
  pub async fn capture_screenshot_raw() -> Result<RawScreenshotCapture> {
      hydrate_session_bus_env();
-
+ 
 -    // Explicit override: use exactly the requested backend, no fallback. Lets
 -    // background/systemd contexts pin `gnome-screenshot` when the DBus paths are
 -    // blocked, and aids debugging.
@@ -527,7 +528,7 @@
          Ok(capture) => return Ok(capture),
          Err(error) => error,
      };
-@@ -205,31 +162,17 @@
+@@ -205,31 +161,17 @@
          Ok(capture) => return Ok(capture),
          Err(error) => error,
      };
@@ -535,7 +536,7 @@
 -        Ok(capture) => return Ok(capture),
 -        Err(error) => error,
 -    };
-
+ 
      Err(anyhow!(
 -        "GNOME Shell screenshot failed: {gnome_error}; \
 -         GNOME Shell extension screenshot failed: {extension_error}; \
@@ -544,7 +545,7 @@
 +        "grim screenshot failed: {grim_error}; XDG portal screenshot failed: {portal_error}"
      ))
  }
-
+ 
 -fn forced_backend() -> Result<Option<ScreenshotBackend>> {
 -    match std::env::var(SCREENSHOT_BACKEND_ENV) {
 -        Ok(value) if !value.trim().is_empty() => {
@@ -563,12 +564,12 @@
 +    hydrate_session_bus_env();
 +    capture_with_grim(Some(region)).await
  }
-
+ 
  pub async fn capture_screenshot() -> Result<ScreenshotCapture> {
-@@ -292,75 +235,59 @@
+@@ -292,75 +234,59 @@
      })
  }
-
+ 
 -async fn capture_with_gnome_shell() -> Result<RawScreenshotCapture> {
 -    let connection = zbus::Connection::session()
 -        .await
@@ -597,12 +598,7 @@
 -        Err(error) => {
 -            cleanup_gnome_requested_path(&path);
 -            return Err(error).context("GNOME Shell Screenshot call failed");
--        }
--    };
-
--    if !success {
--        cleanup_gnome_requested_path(&path);
--        bail!("GNOME Shell reported screenshot failure");
++
 +    let mut command = Command::new(&grim);
 +    command.arg("-t").arg("png");
 +    if let Some(region) = region {
@@ -615,14 +611,30 @@
 +                "{},{} {}x{}",
 +                region.x, region.y, region.width, region.height
 +            ));
-     }
++    }
 +    command
 +        .arg(filename)
 +        .stdin(Stdio::null())
 +        .stdout(Stdio::piped())
 +        .stderr(Stdio::piped());
 +    command.kill_on_drop(true);
-
++
++    let child = command
++        .spawn()
++        .with_context(|| format!("failed to spawn grim at {}", grim.display()))?;
++    let output = match tokio::time::timeout(GRIM_TIMEOUT, child.wait_with_output()).await {
++        Ok(output) => output.context("failed to wait for grim")?,
++        Err(_) => {
++            let _ = fs::remove_file(&path);
++            bail!("grim timed out after {} seconds", GRIM_TIMEOUT.as_secs());
+         }
+     };
+ 
+-    if !success {
+-        cleanup_gnome_requested_path(&path);
+-        bail!("GNOME Shell reported screenshot failure");
+-    }
+-
 -    read_png_as_capture(
 -        PathBuf::from(filename_used),
 -        "gnome-shell",
@@ -652,20 +664,11 @@
 -        Err(error) => {
 -            cleanup_gnome_requested_path(&path);
 -            return Err(error).context("Codex GNOME Shell extension CaptureScreenshot call failed");
-+    let child = command
-+        .spawn()
-+        .with_context(|| format!("failed to spawn grim at {}", grim.display()))?;
-+    let output = match tokio::time::timeout(GRIM_TIMEOUT, child.wait_with_output()).await {
-+        Ok(output) => output.context("failed to wait for grim")?,
-+        Err(_) => {
-+            let _ = fs::remove_file(&path);
-+            bail!("grim timed out after {} seconds", GRIM_TIMEOUT.as_secs());
-         }
-     };
+-        }
+-    };
 -    if !ok {
 -        cleanup_gnome_requested_path(&path);
 -        bail!("Codex GNOME Shell extension refused screenshot: {message}");
-+
 +    if !output.status.success() {
 +        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
 +        let _ = fs::remove_file(&path);
@@ -674,7 +677,7 @@
 +        }
 +        bail!("grim exited with {}: {detail}", output.status);
      }
-
+ 
      read_png_as_capture(
          path.clone(),
 -        "gnome-shell-extension",
@@ -682,10 +685,10 @@
          ScreenshotCleanup::DeletePath(path),
      )
      .await
-@@ -415,61 +342,6 @@
+@@ -415,61 +341,6 @@
      read_png_as_capture(path, "xdg-desktop-portal", ScreenshotCleanup::Preserve).await
  }
-
+ 
 -/// Upper bound on how long we wait for `gnome-screenshot` before killing it.
 -/// Matches the portal timeout: a hung capture must not block the tool forever.
 -const GNOME_SCREENSHOT_TIMEOUT: Duration = Duration::from_secs(20);
@@ -744,10 +747,10 @@
  async fn portal_response_stream(connection: &zbus::Connection) -> Result<MessageStream> {
      let response_rule = MatchRule::builder()
          .msg_type(MessageType::Signal)
-@@ -644,10 +516,6 @@
+@@ -644,10 +515,6 @@
      (next_width, next_height)
  }
-
+ 
 -fn cleanup_gnome_requested_path(path: &Path) {
 -    let _ = fs::remove_file(path);
 -}
@@ -755,9 +758,9 @@
  fn png_dimensions(bytes: &[u8]) -> Result<(u32, u32)> {
      const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
      if bytes.len() < 24 || &bytes[..8] != PNG_SIGNATURE || &bytes[12..16] != b"IHDR" {
-@@ -776,44 +644,16 @@
+@@ -776,44 +643,16 @@
      }
-
+ 
      #[test]
 -    fn parses_known_backend_names() {
 -        assert_eq!(
@@ -794,6 +797,9 @@
 -        std::env::set_var(SCREENSHOT_BACKEND_ENV, "bogus");
 -        let error = forced_backend().unwrap_err();
 -        assert!(error.to_string().contains("not a recognized backend"));
+-
+-        std::env::remove_var(SCREENSHOT_BACKEND_ENV);
+-        assert_eq!(forced_backend().unwrap(), None);
 +    fn screenshot_region_keeps_negative_hyprland_coordinates() {
 +        let region = ScreenshotRegion {
 +            x: -1080,
@@ -801,18 +807,16 @@
 +            width: 1920,
 +            height: 1080,
 +        };
-
--        std::env::remove_var(SCREENSHOT_BACKEND_ENV);
--        assert_eq!(forced_backend().unwrap(), None);
++
 +        assert_eq!((region.x, region.y), (-1080, 0));
 +        assert_eq!((region.width, region.height), (1920, 1080));
      }
-
+ 
      #[test]
-@@ -952,68 +792,4 @@
+@@ -952,68 +791,4 @@
          let _ = fs::remove_file(path);
      }
-
+ 
 -    #[tokio::test]
 -    async fn gnome_capture_deletes_backend_temp_path_on_success() {
 -        let path = test_path("gnome-valid");
@@ -877,7 +881,8 @@
 -        assert!(returned.exists());
 -        let _ = fs::remove_file(returned);
 -    }
- }
+-}
++}
 --- a/computer-use-linux/src/server.rs
 +++ b/computer-use-linux/src/server.rs
 @@ -12,8 +12,9 @@
@@ -902,7 +907,7 @@
      handler::server::wrapper::{Json, Parameters},
      model::{CallToolResult, Content},
 @@ -93,7 +94,7 @@
-
+ 
      #[tool(
          name = "setup_accessibility",
 -        description = "Enable GNOME accessibility through gsettings so Linux Computer Use can read AT-SPI trees.",
@@ -911,7 +916,7 @@
              read_only_hint = false,
              destructive_hint = false,
 @@ -107,7 +108,7 @@
-
+ 
      #[tool(
          name = "setup_window_targeting",
 -        description = "Install and enable the optional GNOME Shell extension used for exact window list/focus targeting when GNOME blocks native introspection.",
@@ -920,7 +925,7 @@
              read_only_hint = false,
              destructive_hint = false,
 @@ -361,7 +362,7 @@
-
+ 
      #[tool(
          name = "screenshot",
 -        description = "Capture the screen and return it as a viewable, size-bounded image. Optionally target a window (window_id/pid/wm_class/title/app_id): the window is raised to the front and the image is cropped before any resize. Returns the image plus a short caption with returned dimensions, coordinate dimensions, scale, format, quality, source, and crop bounds; callers can request jpeg/quality for compression before resizing.",
@@ -942,13 +947,13 @@
 +                None,
 +            ));
 +        }
-
+ 
          // When targeting a window, raise it first (so it isn't occluded) and
          // resolve its bounds so we can crop to just that window.
 @@ -394,10 +404,14 @@
              }
          }
-
+ 
 -        let raw_capture = capture_screenshot_raw()
 -            .await
 +        let raw_capture = match area {
@@ -960,7 +965,7 @@
 +        if area.is_none() {
 +            self.cache_desktop_size(raw_capture.width, raw_capture.height);
 +        }
-
+ 
          // Warn when the target window extends past the visible desktop: the
          // portal only captures on-screen pixels, so the crop silently loses the
 @@ -443,8 +457,17 @@
@@ -981,22 +986,7 @@
          if let Some(note) = off_screen_note {
              caption["window_off_screen"] = serde_json::json!(true);
              caption["off_screen_note"] = serde_json::json!(note);
-@@ -1131,12 +1154,12 @@
-                 });
-             }
-         };
--        let Some(key_events) = key_sequence(&params.key) else {
-+        let Some(key_events) = key_sequence(&params.key) else {
-             return Json(ActionOutput {
-                 ok: false,
-                 implemented: true,
-                 action: "press_key".to_string(),
--                message: "Unsupported key. Use names like Enter, Escape, Tab, ArrowLeft, Super, Ctrl+L, or a single US keyboard letter/digit.".to_string(),
-+                message: "Unsupported key. Use names like Enter, Escape, Tab, ArrowLeft, Super, Ctrl+L, or a single US keyboard letter/digit.".to_string(),
-                 received,
-             });
-         };
-@@ -1214,7 +1238,15 @@
+@@ -1214,7 +1237,15 @@
                  Err(_) => {}
              }
          }
@@ -1013,8 +1003,8 @@
              if let Ok(keysyms) = keysyms_for_text(&params.text) {
                  match self.ensure_portal_keyboard_session().await {
                      Ok(Some(session)) => match type_text_with_keysyms(&session, &keysyms).await {
-@@ -1258,7 +1290,7 @@
-
+@@ -1258,7 +1289,7 @@
+ 
      #[tool(
          name = "move_window",
 -        description = "Move a window to a new desktop position (frame top-left in desktop coordinates). Useful to recover windows that are partially off-screen. Requires the computer-use-linux GNOME Shell extension.",
@@ -1022,7 +1012,7 @@
          annotations(
              read_only_hint = false,
              destructive_hint = false,
-@@ -1272,16 +1304,15 @@
+@@ -1272,16 +1303,15 @@
      ) -> Json<WindowGeometryOutput> {
          let received = Some(serde_json::json!(params.clone()));
          let target = params.target.clone().into_target();
@@ -1034,7 +1024,7 @@
          })
          .await
      }
-
+ 
      #[tool(
          name = "resize_window",
 -        description = "Resize a window to a new frame width/height in desktop pixels, unmaximizing it first if needed. Useful to fit a window fully on-screen. Requires the computer-use-linux GNOME Shell extension.",
@@ -1042,7 +1032,7 @@
          annotations(
              read_only_hint = false,
              destructive_hint = false,
-@@ -1295,13 +1326,8 @@
+@@ -1295,13 +1325,8 @@
      ) -> Json<WindowGeometryOutput> {
          let received = Some(serde_json::json!(params.clone()));
          let target = params.target.clone().into_target();
@@ -1058,7 +1048,7 @@
          })
          .await
      }
-@@ -1314,7 +1340,7 @@
+@@ -1314,7 +1339,7 @@
      // can't be env!("CARGO_PKG_VERSION"); the MCP safety check (CI) fails the
      // build if it drifts from the Cargo version.
      version = "0.3.1-linux-alpha1",
@@ -1066,8 +1056,8 @@
 +    instructions = "Begin every turn that uses Computer Use by calling get_app_state. If diagnostics report unavailable AT-SPI, call setup_accessibility; on Hyprland this only checks the compositor-neutral accessibility bus and never installs GNOME components. Use list_windows/focused_window before targeted keyboard input. On Hyprland, native hyprctl window listing, focus, move, and resize are preferred and setup_window_targeting is a no-op. This Linux backend captures full-screen and explicit x/y/width/height areas through native grim on Wayland, with XDG Desktop Portal as a full-screen fallback; no GNOME screenshot command or screenshot environment variable is required. It reads AT-SPI trees with action/value metadata, invokes native AT-SPI actions, sets AT-SPI values or editable text, attaches best-effort terminal tty/process metadata to terminal windows, sends coordinate or element-targeted click/scroll/drag input through the Wayland remote desktop portal when available, and sends literal text through the portal or the dedicated US-mapped ydotool virtual keyboard before falling back to ydotool. The Hyprland ydotoold-virtual-device must use kb_layout=us so manual ydotool type commands and Computer Use share the same physical key mapping. Screenshot results include width/height for the returned image plus coordinate_width/coordinate_height and scale for desktop coordinate conversion; request more detail with max_width, max_height, max_bytes, format=jpeg, quality, or an explicit area instead of relying on unbounded screenshots. Tools with readOnlyHint=false may mutate local desktop or application state; hosts should require approval for actions that can submit, delete, send, purchase, or overwrite data. For element-targeted actions, prefer element_index from the latest get_app_state result; click, perform_action, and set_value can also use semantic role/name/text/states selectors when the target is unique. type_text and press_key accept optional window_id, pid, app_id, wm_class, title, tty, terminal_pid, terminal_command, or terminal_cwd selectors and refuse targeted input if focus cannot be verified. After targeted keyboard input, results append focused-element feedback from AT-SPI (role, name, editable) and warn when no editable element holds focus — treat that warning as the input not landing. Screenshot, click, and input results warn when the target window or coordinate is partially or fully off-screen; use move_window/resize_window to bring a window fully on-screen before retrying. scroll accepts the same window targeting and relative coordinates as click. get_app_state returns a compact readiness block by default; pass verbose=true for the full diagnostics dump. Electron apps expose no AT-SPI tree unless launched with --force-renderer-accessibility."
  )]
  impl ServerHandler for ComputerUseLinux {}
-
-@@ -1546,6 +1572,17 @@
+ 
+@@ -1546,6 +1571,17 @@
      /// Capture the whole desktop even when a window is targeted (default false).
      #[serde(default)]
      full_screen: Option<bool>,
@@ -1085,9 +1075,9 @@
      /// Maximum returned screenshot width in pixels (default 1920, hard-capped).
      #[serde(default)]
      max_width: Option<u32>,
-@@ -1568,6 +1605,22 @@
+@@ -1568,6 +1604,22 @@
  }
-
+ 
  impl ScreenshotParams {
 +    fn screenshot_region(&self) -> Result<Option<ScreenshotRegion>> {
 +        let values = [self.x.is_some(), self.y.is_some(), self.width.is_some(), self.height.is_some()];
@@ -1108,10 +1098,10 @@
      fn window_target(&self) -> Option<WindowTarget> {
          if self.window_id.is_none()
              && self.pid.is_none()
-@@ -2251,8 +2304,9 @@
+@@ -2251,8 +2303,9 @@
          }
      }
-
+ 
 -    /// Shared move/resize plumbing: resolve the window target, run the GNOME
 -    /// Shell extension operation, then re-query bounds to report the result.
 +    /// Shared move/resize plumbing: resolve the window target, run the
@@ -1120,7 +1110,7 @@
      async fn window_geometry_op<F, Fut>(
          &self,
          received: Option<serde_json::Value>,
-@@ -2260,7 +2314,7 @@
+@@ -2260,7 +2313,7 @@
          op: F,
      ) -> Json<WindowGeometryOutput>
      where
@@ -1129,7 +1119,7 @@
          Fut: Future<Output = Result<String>>,
      {
          let windows = match list_windows().await {
-@@ -2270,7 +2324,7 @@
+@@ -2270,7 +2323,7 @@
                  return Json(WindowGeometryOutput {
                      ok: false,
                      implemented: true,
@@ -1138,7 +1128,7 @@
                      window: None,
                      message: format!("Window listing failed: {error}"),
                      permissions_hint: window_permission_hint(&error),
-@@ -2278,13 +2332,13 @@
+@@ -2278,13 +2331,13 @@
                  });
              }
          };
@@ -1155,7 +1145,7 @@
                      window: None,
                      message: format!("{error:#}"),
                      permissions_hint: None,
-@@ -2292,7 +2346,9 @@
+@@ -2292,7 +2345,9 @@
                  });
              }
          };
@@ -1166,7 +1156,7 @@
              Ok(message) => {
                  // Re-query so the caller sees the compositor-final geometry
                  // (tiling constraints, minimum sizes, etc. may adjust it).
-@@ -2310,7 +2366,7 @@
+@@ -2310,7 +2365,7 @@
                  Json(WindowGeometryOutput {
                      ok: true,
                      implemented: true,
@@ -1175,7 +1165,7 @@
                      window,
                      message,
                      permissions_hint: None,
-@@ -2322,7 +2378,7 @@
+@@ -2322,7 +2377,7 @@
                  Json(WindowGeometryOutput {
                      ok: false,
                      implemented: true,
@@ -1184,8 +1174,8 @@
                      window: None,
                      permissions_hint: window_permission_hint(&error),
                      message: error,
-@@ -3461,7 +3517,9 @@
-
+@@ -3461,7 +3516,9 @@
+ 
  async fn run_ydotool(args: &[String]) -> std::result::Result<Output, String> {
      ydotool::ensure_supported()?;
 -    let mut command = TokioCommand::new("ydotool");
@@ -1195,8 +1185,8 @@
      command.args(args);
      if let Some(socket) = ydotool_socket() {
          command.env("YDOTOOL_SOCKET", socket);
-@@ -3487,7 +3545,9 @@
-
+@@ -3487,7 +3544,9 @@
+ 
  async fn run_ydotool_type_text(text: &str) -> std::result::Result<Output, String> {
      ydotool::ensure_supported()?;
 -    let mut command = TokioCommand::new("ydotool");
@@ -1206,7 +1196,7 @@
      command.args(["type", "--file", "-"]);
      if let Some(socket) = ydotool_socket() {
          command.env("YDOTOOL_SOCKET", socket);
-@@ -3771,8 +3840,10 @@
+@@ -3771,8 +3830,10 @@
          .map(PathBuf::from)
          .or_else(|| user_id().map(|uid| PathBuf::from(format!("/run/user/{uid}"))))
      {
@@ -1217,84 +1207,33 @@
      candidates.push(PathBuf::from("/tmp/.ydotool_socket"));
      candidates
  }
-@@ -3801,7 +3872,13 @@
+@@ -3799,6 +3860,12 @@
+         _ => "0xC0",
+     }
      .to_string()
- }
-
++}
++
 +fn text_contains_layout_sensitive_characters(text: &str) -> bool {
 +    text.chars().any(|character| {
 +        !character.is_ascii_alphanumeric() && !matches!(character, ' ' | '\n' | '\r' | '\t')
 +    })
-+}
-+
+ }
+ 
  fn key_sequence(key: &str) -> Option<Vec<String>> {
-     let parts = key
-         .split('+')
-         .map(str::trim)
-@@ -4847,7 +5060,7 @@
-     #[test]
-     fn key_sequence_presses_modifiers_around_key() {
-         assert_eq!(
--            key_sequence("Ctrl+Shift+P"),
-+            key_sequence("Ctrl+Shift+P"),
-             Some(vec![
-                 "29:1".to_string(),
-                 "42:1".to_string(),
-@@ -4862,7 +5075,7 @@
-     #[test]
-     fn key_sequence_presses_bare_modifier() {
-         assert_eq!(
--            key_sequence("Super"),
-+            key_sequence("Super"),
-             Some(vec!["125:1".to_string(), "125:0".to_string()])
-         );
-     }
-@@ -4870,7 +5083,7 @@
-     #[test]
-     fn key_sequence_keeps_shortcuts_and_navigation_on_raw_events() {
-         assert_eq!(
--            key_sequence("Ctrl+L"),
-+            key_sequence("Ctrl+L"),
-             Some(vec![
-                 "29:1".to_string(),
-                 "38:1".to_string(),
-@@ -4879,19 +5092,19 @@
-             ])
-         );
-         assert_eq!(
--            key_sequence("ArrowLeft"),
-+            key_sequence("ArrowLeft"),
-             Some(vec!["105:1".to_string(), "105:0".to_string()])
-         );
-         assert_eq!(
--            key_sequence("Escape"),
-+            key_sequence("Escape"),
-             Some(vec!["1:1".to_string(), "1:0".to_string()])
-         );
-         assert_eq!(
--            key_sequence("Enter"),
-+            key_sequence("Enter"),
-             Some(vec!["28:1".to_string(), "28:0".to_string()])
-         );
-     }
-
-     #[test]
-     fn ydotool_type_timeout_scales_with_text_length() {
-         assert_eq!(ydotool_type_timeout("").as_secs(), 10);
 --- a/computer-use-linux/src/windowing/registry.rs
 +++ b/computer-use-linux/src/windowing/registry.rs
 @@ -9,7 +9,7 @@
  pub use kwin::KWIN_BACKEND;
  pub use niri::NIRI_BACKEND;
-
+ 
 -pub const WINDOW_PERMISSION_HINT: &str = "Computer Use could not access a supported window list backend. Targeted window input requires session-bus access plus GNOME Shell Introspect, the Codex GNOME Shell extension, the COSMIC Wayland helper, KWin/Plasma DBus scripting, Hyprland hyprctl, Niri IPC, or i3-msg. On GNOME, run setup_window_targeting to install the extension backend.";
 +pub const WINDOW_PERMISSION_HINT: &str = "Computer Use could not access a supported window list backend. On Hyprland, native targeted input uses hyprctl and setup_window_targeting is a no-op; other sessions may use their registered compositor backend.";
-
+ 
  #[derive(Debug, Clone, Copy)]
  pub struct BackendDescriptor {
 @@ -42,11 +42,11 @@
  }
-
+ 
  const BACKEND_ORDER: &[BackendKind] = &[
 +    BackendKind::Hyprland,
      BackendKind::GnomeExtension,
@@ -1305,10 +1244,13 @@
      BackendKind::Niri,
      BackendKind::I3,
  ];
-@@ -193,6 +193,30 @@
-         )),
-     }
- }
+@@ -190,6 +190,30 @@
+         I3_BACKEND => i3::activate_window(window.window_id),
+         backend => Err(anyhow!(
+             "Unsupported window backend for activation: {backend}"
++        )),
++    }
++}
 +
 +pub async fn move_window(backend: &str, window_id: u64, x: i32, y: i32) -> Result<String> {
 +    match backend {
@@ -1330,12 +1272,9 @@
 +        }
 +        backend => Err(anyhow!(
 +            "Window resize is not implemented for the {backend} backend"
-+        )),
-+    }
-+}
-
- pub fn focused_window_override() -> Option<WindowInfo> {
-     cosmic::focused_window().ok().flatten()
+         )),
+     }
+ }
 --- a/computer-use-linux/src/windowing/backends/hyprland.rs
 +++ b/computer-use-linux/src/windowing/backends/hyprland.rs
 @@ -6,7 +6,7 @@
@@ -1345,11 +1284,11 @@
 -use std::process::Command;
 +use std::process::{Command, Output};
  use std::time::SystemTime;
-
+ 
  pub const HYPRLAND_BACKEND: &str = "hyprland";
-@@ -82,19 +82,107 @@
+@@ -82,21 +82,109 @@
  }
-
+ 
  pub fn activate_window(window_id: u64) -> Result<()> {
 -    let address = format!("address:0x{window_id:x}");
 -    let output = hyprctl_output(&["dispatch", "focuswindow", &address])
@@ -1361,6 +1300,7 @@
 -            "hyprctl dispatch focuswindow {address} failed: {}",
 -            String::from_utf8_lossy(&output.stderr).trim()
 -        );
+-    }
 +    let address = hyprland_window_selector(window_id);
 +    let lua_dispatch = focus_lua_dispatch(&address);
 +    let legacy_args = ["dispatch", "focuswindow", address.as_str()];
@@ -1380,7 +1320,7 @@
 +pub fn resize_window(window_id: u64, width: i32, height: i32) -> Result<String> {
 +    if width <= 0 || height <= 0 {
 +        bail!("Hyprland window size must be positive, got {width}x{height}");
-     }
++    }
 +    dispatch_window_pixel("resize", "resizewindowpixel", width, height, window_id)
 +        .map(|()| format!("Hyprland resized window 0x{window_id:x} to {width}x{height}."))
 +}
@@ -1455,7 +1395,7 @@
 +
 +    output.status.to_string()
  }
-
+ 
  fn hyprctl_output(args: &[&str]) -> std::io::Result<std::process::Output> {
 -    let mut command = Command::new("hyprctl");
 +    let hyprctl = crate::diagnostics::resolve_command("hyprctl").ok_or_else(|| {
@@ -1468,10 +1408,11 @@
      let has_signature = std::env::var("HYPRLAND_INSTANCE_SIGNATURE")
          .ok()
          .is_some_and(|value| !value.trim().is_empty());
-@@ -227,5 +313,24 @@
-
+@@ -226,6 +314,25 @@
+         let selected = select_hyprland_instance(vec![older, newer]).unwrap();
+ 
          assert_eq!(selected.signature, "newer");
-     }
++    }
 +
 +    #[test]
 +    fn builds_hyprland_056_lua_dispatches_with_exact_window_selectors() {
@@ -1490,14 +1431,13 @@
 +            pixel_lua_dispatch("resize", 1280, 720, &address),
 +            "hl.dsp.window.resize({ x = 1280, y = 720, relative = false, window = \"address:0x2a\" })"
 +        );
-+    }
+     }
  }
-
- #[derive(Debug, Deserialize)]
+ 
 --- a/computer-use-linux/src/ydotool.rs
 +++ b/computer-use-linux/src/ydotool.rs
 @@ -117,8 +117,10 @@
-
+ 
  fn probe() -> Result<String, String> {
      let runtime_dir = env::var_os("XDG_RUNTIME_DIR");
 +    let ydotool_path = crate::diagnostics::resolve_command("ydotool")
