@@ -1,7 +1,6 @@
 --- a/computer-use-linux/src/windowing/registry.rs
 +++ b/computer-use-linux/src/windowing/registry.rs
-@@ -44,11 +44,11 @@
- }
+@@ -46,11 +46,11 @@
  
  const BACKEND_ORDER: &[BackendKind] = &[
 +    BackendKind::Hyprland,
@@ -13,7 +12,9 @@
      BackendKind::Niri,
      BackendKind::I3,
      // Generic X11/EWMH: last, so a session-native backend always wins first.
-@@ -250,10 +250,12 @@
+--- a/computer-use-linux/src/windowing/registry.rs
++++ b/computer-use-linux/src/windowing/registry.rs
+@@ -250,24 +250,26 @@
  
  pub async fn move_window(window: &WindowInfo, x: i32, y: i32) -> Result<String> {
      match window.backend.as_str() {
