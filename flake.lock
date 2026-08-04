@@ -6,11 +6,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1785782589,
-        "narHash": "sha256-wrAjDOLBvBTIb/nkwZE3VVGvLh9g4flPF+/pYla12Ns=",
+        "lastModified": 1785789460,
+        "narHash": "sha256-Sb0+BJuESdSAAxq/lq9ROTuuUyzXSP8VNnBmEGJtR1k=",
         "owner": "ilysenko",
         "repo": "codex-desktop-linux",
-        "rev": "ddf84a0c87c3f7b05494a127d9c87f0c3cdf4ce4",
+        "rev": "717a981443f4e0eb509e2e5fc050ce38d7bd0e52",
         "type": "github"
       },
       "original": {
