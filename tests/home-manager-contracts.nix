@@ -342,7 +342,7 @@ let
     telemetry = false
   '';
 
-  generatedFiles = pkgs.runCommand "nixslop-home-manager-generated-file-contracts" { } ''
+  generatedFiles = pkgs.runCommand "nixslop-generated-file-contracts" { } ''
     cmp ${kimiConfigSource} ${expectedKimiConfig}
     grep -Fq '"model": "nixslop-contract-model"' ${
       nativeOpenCode.xdg.configFile."opencode/opencode.json".source

@@ -1,4 +1,4 @@
-# NixSlop Home Manager
+# NixSlop
 
 NixSlop provides fast-moving developer tools through Home Manager while keeping
 their package pins, desktop integration, checks, and daily updates in one flake.
@@ -16,7 +16,7 @@ Add the input:
 
 ```nix
 inputs.nixslop = {
-  url = "github:cattosmile/NixSlop-HomeManager";
+  url = "github:cattosmile/NixSlop";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
@@ -70,9 +70,9 @@ alongside the NixSlop-specific Kimi, desktop, and OMX options:
 }
 ```
 
-The aggregate module imports all NixSlop Home Manager integrations; it does not
-enable programs by itself. NixSlop supplies its package builds as defaults, so
-normal Home Manager settings still own generated OpenCode and Codex files.
+The aggregate module imports all Home Manager integrations in NixSlop; it does
+not enable programs by itself. NixSlop supplies its package builds as defaults,
+so normal Home Manager settings still own generated OpenCode and Codex files.
 
 ### Choose one Codex configuration owner
 
