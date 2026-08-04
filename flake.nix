@@ -1,5 +1,5 @@
 {
-  description = "NixSlop Home Manager - fast-moving developer tools as Home Manager modules";
+  description = "NixSlop - fast-moving developer tools as Home Manager modules";
 
   nixConfig = {
     extra-substituters = [ "https://nixslop.cachix.org?priority=30" ];
