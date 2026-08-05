@@ -90,6 +90,44 @@ in
       default = true;
       description = "Run idempotent oh-my-codex plugin setup during Home Manager activation.";
     };
+
+    restoreDefaultPlugins = lib.mkOption {
+      type = lib.types.bool;
+      default = true;
+      description = ''
+        Restore Codex's default document, spreadsheet, presentation, PDF,
+        template, Teams, and Outlook Calendar plugins when they are available.
+        The activation only adds missing plugin entries and never touches Codex
+        authentication, account data, skills, or existing plugin entries. It is
+        skipped when native `programs.codex` owns the generated config file.
+      '';
+    };
+
+    primaryRuntimePath = lib.mkOption {
+      type = lib.types.str;
+      default = "${config.home.homeDirectory}/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime";
+      defaultText = lib.literalExpression ''
+        "${config.home.homeDirectory}/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
+      '';
+      description = ''
+        Local Codex primary-runtime marketplace path. Codex Desktop populates
+        this path; if it is not present, the activation leaves it untouched.
+      '';
+    };
+
+    defaultPlugins = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [
+        "documents@openai-primary-runtime"
+        "spreadsheets@openai-primary-runtime"
+        "presentations@openai-primary-runtime"
+        "pdf@openai-primary-runtime"
+        "template-creator@openai-primary-runtime"
+        "outlook-calendar@openai-curated"
+        "teams@openai-curated"
+      ];
+      description = "Codex plugin IDs restored by the default-plugin activation.";
+    };
   };
 
   config = lib.mkMerge [
@@ -143,6 +181,41 @@ in
           fi
         ''
       );
+
+      home.activation.restoreCodexDefaultPlugins =
+        lib.mkIf (cfg.restoreDefaultPlugins && (!nativeCodexEnabled || cfg.setupPlugin))
+          (
+            lib.hm.dag.entryAfter ([ "writeBoundary" ] ++ lib.optional cfg.setupPlugin "refreshOhMyCodexPlugin")
+              ''
+                codex_bin="${effectiveCodexPackage}/bin/codex"
+                codex_home="${config.home.homeDirectory}/.codex"
+                codex_config="$codex_home/config.toml"
+                primary_runtime="${cfg.primaryRuntimePath}"
+
+                # The primary runtime is downloaded by Codex Desktop and is not part
+                # of NixSlop. Do not create or replace it when it is unavailable.
+                if [ -f "$primary_runtime/.agents/plugins/marketplace.json" ] \
+                  && ! grep -Fq '[marketplaces.openai-primary-runtime]' "$codex_config" 2>/dev/null; then
+                  if ! CODEX_HOME="$codex_home" "$codex_bin" plugin marketplace add "$primary_runtime" >/dev/null 2>&1; then
+                    echo "NixSlop: could not register Codex primary-runtime marketplace; keeping existing config" >&2
+                  fi
+                fi
+
+                for plugin in ${lib.concatMapStringsSep " " lib.escapeShellArg cfg.defaultPlugins}; do
+                  # Never change a user's explicit enablement or source choice. The
+                  # Codex CLI is called only for plugin IDs absent from config.toml.
+                  if [ -f "$codex_config" ] && grep -Fq "[plugins.\"$plugin\"]" "$codex_config"; then
+                    continue
+                  fi
+                  if ! CODEX_HOME="$codex_home" "$codex_bin" plugin add "$plugin" --json >/dev/null 2>&1; then
+                    # A reserved marketplace (for example openai-curated) may not be
+                    # materialized until Codex Desktop has completed its sync. This
+                    # is intentionally non-fatal so rebuilds remain usable offline.
+                    echo "NixSlop: Codex default plugin $plugin is not available yet; leaving existing config" >&2
+                  fi
+                  done
+              ''
+          );
     })
     (lib.optionalAttrs hasDeclarativePluginSupport (
       lib.mkIf (cfg.enable && !cfg.setupPlugin && nativeCodexEnabled) {

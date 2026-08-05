@@ -203,6 +203,7 @@ let
   ];
   codexOmxSetup = codexOmxSetupEval.config;
   codexOmxActivation = codexOmxSetup.home.activation.refreshOhMyCodexPlugin;
+  codexDefaultPluginsActivation = codexOmxSetup.home.activation.restoreCodexDefaultPlugins;
 
   codexOmxWithoutNative =
     (legacyModuleLib.evalModules {
@@ -552,6 +553,25 @@ let
     assert lib.hasInfix "--unset=OMX_ROOT" codexOmxActivation.data;
     assert lib.hasInfix ''CODEX_HOME="/home/module-test/.codex"'' codexOmxActivation.data;
     assert lib.hasInfix "omx setup --plugin --force --scope user" codexOmxActivation.data;
+    assert codexOmxSetup.programs.codexOmx.restoreDefaultPlugins;
+    assert
+      codexDefaultPluginsActivation.after == [
+        "writeBoundary"
+        "refreshOhMyCodexPlugin"
+      ];
+    assert lib.hasInfix "plugin marketplace add" codexDefaultPluginsActivation.data;
+    assert lib.hasInfix "documents@openai-primary-runtime" codexDefaultPluginsActivation.data;
+    assert lib.hasInfix "spreadsheets@openai-primary-runtime" codexDefaultPluginsActivation.data;
+    assert lib.hasInfix "presentations@openai-primary-runtime" codexDefaultPluginsActivation.data;
+    assert lib.hasInfix "pdf@openai-primary-runtime" codexDefaultPluginsActivation.data;
+    assert lib.hasInfix "template-creator@openai-primary-runtime" codexDefaultPluginsActivation.data;
+    assert lib.hasInfix "outlook-calendar@openai-curated" codexDefaultPluginsActivation.data;
+    assert lib.hasInfix "teams@openai-curated" codexDefaultPluginsActivation.data;
+    assert lib.hasInfix "if [ -f \"$primary_runtime/.agents/plugins/marketplace.json\" ]"
+      codexDefaultPluginsActivation.data;
+    assert lib.hasInfix ''grep -Fq "[plugins.\"$plugin\"]"'' codexDefaultPluginsActivation.data;
+    assert lib.hasInfix "continue" codexDefaultPluginsActivation.data;
+    assert !lib.hasInfix "auth.json" codexDefaultPluginsActivation.data;
     assert !(builtins.hasAttr "codex" codexOmxWithoutNative.programs);
     assert lib.all (entry: entry.assertion) codexOmxWithoutNative.assertions;
     assert packageCount self.packages.${system}.codex codexOmxWithoutNative.home.packages == 1;
@@ -577,6 +597,7 @@ let
     assert builtins.hasAttr ".codex/config.toml" codexOmxDeclarative.home.file;
     assert codexOmxDeclarative.home.file.".codex/AGENTS.md".text == "NixSlop Codex contract\n";
     assert !(builtins.hasAttr "refreshOhMyCodexPlugin" codexOmxDeclarative.home.activation);
+    assert !(builtins.hasAttr "restoreCodexDefaultPlugins" codexOmxDeclarative.home.activation);
     assert builtins.length declarativePluginCacheFiles == 1;
     assert
       codexOmxDeclarative.home.file.${declarativePluginCacheFile}.source.outPath

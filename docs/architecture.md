@@ -73,6 +73,11 @@ Home Manager modules remain the canonical owners of OpenCode and Codex files:
 - Mutable `omx setup --plugin` owns Codex configuration when
   `programs.codexOmx.setupPlugin = true`; the module rejects simultaneous
   native Codex file generation.
+- `programs.codexOmx.restoreDefaultPlugins` owns only the additive registration
+  of Codex's shipped default plugin IDs. It invokes the Codex CLI after OMX,
+  skips unavailable runtime marketplaces, and never owns authentication,
+  account slots, skills, or existing plugin entries. Native Home Manager Codex
+  configuration is left to its declarative plugin options instead.
 - `programs.kimiCode.settings` owns non-secret Kimi configuration at
   `~/.kimi-code/config.toml`.
 

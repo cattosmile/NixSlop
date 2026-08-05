@@ -103,6 +103,20 @@ programs = {
 };
 ```
 
+### Codex's default plugins
+
+`programs.codexOmx.restoreDefaultPlugins` is enabled by default. In mutable OMX
+mode, during Home Manager activation NixSlop asks the installed Codex CLI to
+register the document, spreadsheet, presentation, PDF, template, Outlook
+Calendar, and Teams plugins that Codex Desktop has already made available. The
+operation is additive and idempotent: it never rewrites `auth.json`, account
+slots, skills, or existing plugin entries. When native `programs.codex` owns
+the generated config, manage plugin entries through that native module instead.
+The primary-runtime marketplace is skipped until Codex Desktop has populated
+its normal `~/.cache/codex-runtimes/codex-primary-runtime` directory, so an
+offline first activation remains safe. Set `restoreDefaultPlugins = false` or
+override `defaultPlugins` when a different plugin policy is desired.
+
 ### Kimi settings and secrets
 
 `programs.kimiCode.settings` generates `~/.kimi-code/config.toml`. Values
