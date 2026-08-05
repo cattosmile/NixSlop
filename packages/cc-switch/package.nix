@@ -21,6 +21,7 @@
   defaultCodexConfigDir ? null,
   sandboxCodexDir ? null,
   sandboxAgentsDir ? null,
+  allowSharedCodexDir ? false,
 }:
 
 let
@@ -55,6 +56,8 @@ let
       tag = "v${finalAttrs.version}";
       hash = versionData.sourceHash;
     };
+
+    patches = [ ./official-account-slot-auth.patch ];
 
     cargoRoot = "src-tauri";
     cargoHash = versionData.cargoHash;
@@ -277,6 +280,7 @@ stdenvNoCC.mkDerivation {
     if $probe_mode; then
       codex_state="$state_root/codex"
       agents_state="$state_root/agents"
+      allow_shared_codex=false
     else
       codex_state=${
         if sandboxCodexDir == null then
@@ -290,6 +294,7 @@ stdenvNoCC.mkDerivation {
         else
           lib.escapeShellArg (toString sandboxAgentsDir)
       }
+      allow_shared_codex=${if allowSharedCodexDir then "true" else "false"}
     fi
     config_state="$state_root/config"
     applications_state="$state_root/applications"
@@ -344,8 +349,12 @@ stdenvNoCC.mkDerivation {
     for state_dir in "''${state_dirs[@]}"; do
       for protected_dir in "''${protected_dirs[@]}"; do
         if paths_overlap "$state_dir" "$protected_dir"; then
-          echo "cc-switch: sandbox state directories overlap protected directories" >&2
-          exit 2
+          if ! $allow_shared_codex \
+            || [[ "$state_dir" != "$protected_codex" \
+              || "$protected_dir" != "$protected_codex" ]]; then
+            echo "cc-switch: sandbox state directories overlap protected directories" >&2
+            exit 2
+          fi
         fi
       done
     done
@@ -372,6 +381,12 @@ stdenvNoCC.mkDerivation {
       "$config_state" "$applications_state" \
       "$HOME/.codex" "$HOME/.agents" \
       "$config_home" "$legacy_config_home" "$data_home/applications"
+
+    if $allow_shared_codex; then
+      # Native Codex auth is secret material; keep the shared directory
+      # private even when it pre-dates this module's default.
+      ${coreutils}/bin/chmod 700 -- "$codex_state"
+    fi
 
     for ((i = 0; i < ''${#state_paths[@]}; i++)); do
       if [[ $(${coreutils}/bin/realpath -- "''${state_paths[i]}") != "''${state_dirs[i]}" ]]; then
@@ -400,13 +415,18 @@ stdenvNoCC.mkDerivation {
       config_binds+=(--bind "$config_state_real" "$protected_legacy_config")
     fi
 
+    codex_binds=()
+    if ! $allow_shared_codex; then
+      codex_binds=(--bind "$codex_state_real" "$protected_codex")
+    fi
+
     exec ${bubblewrap}/bin/bwrap \
       --die-with-parent \
       --new-session \
       --bind / / \
       --dev-bind /dev /dev \
       --proc /proc \
-      --bind "$codex_state_real" "$protected_codex" \
+      "''${codex_binds[@]}" \
       --bind "$agents_state_real" "$protected_agents" \
       "''${config_binds[@]}" \
       --bind "$applications_state_real" "$protected_applications" \

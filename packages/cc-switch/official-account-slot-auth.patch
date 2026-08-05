@@ -1,0 +1,55 @@
+diff --git a/src-tauri/src/codex_config.rs b/src-tauri/src/codex_config.rs
+--- a/src-tauri/src/codex_config.rs
++++ b/src-tauri/src/codex_config.rs
+@@ -505,6 +505,19 @@ pub fn clear_stale_codex_live_auth_after_official_switch(
+ }
+-
++
++/// Remove the live official login when switching to an empty official
++/// provider slot. CC Switch stores the outgoing provider's auth snapshot
++/// during backfill; deleting the live file makes Codex show its normal login
++/// flow so a second account can be authenticated into that slot.
++pub fn clear_codex_live_auth_for_empty_official_switch() -> Result<bool, AppError> {
++    let auth_path = get_codex_auth_path();
++    if !auth_path.exists() {
++        return Ok(false);
++    }
++    delete_file(&auth_path)?;
++    Ok(true)
++}
++
+ pub fn should_restore_codex_provider_token_for_backfill(
+     category: Option<&str>,
+     template_settings: &Value,
+ ) -> bool {
+diff --git a/src-tauri/src/services/provider/mod.rs b/src-tauri/src/services/provider/mod.rs
+--- a/src-tauri/src/services/provider/mod.rs
++++ b/src-tauri/src/services/provider/mod.rs
+@@ -3146,3 +3146,25 @@ impl ProviderService {
+         write_live_with_common_config(state.db.as_ref(), &app_type, provider)?;
+-
++
++        // An explicitly empty official provider is used as a login slot for a
++        // separate ChatGPT account. Once the outgoing slot has been safely
++        // backfilled, clear the shared live auth file so Codex prompts for the
++        // newly selected account instead of silently reusing the old one.
++        if matches!(app_type, AppType::Codex)
++            && backfill_completed
++            && provider.category.as_deref() == Some("official")
++            && provider
++                .settings_config
++                .get("auth")
++                .is_none_or(|auth| !crate::codex_config::codex_auth_has_login_material(auth))
++        {
++            match crate::codex_config::clear_codex_live_auth_for_empty_official_switch() {
++                Ok(true) => log::info!(
++                    "Cleared live Codex auth for empty official provider slot '{}'",
++                    provider.id
++                ),
++                Ok(false) => {}
++                Err(e) => log::warn!("Failed to clear live Codex auth for empty slot: {e}"),
++            }
++        }
++
+         // A material-less official Codex provider gets a config-only live
+         // write, which can leave the previous third-party key in
