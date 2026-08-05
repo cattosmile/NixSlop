@@ -11,7 +11,7 @@ index 851936a..126cff8 100644
 +/// live plugin and marketplace registrations when routing writes replace the
 +/// provider's config text.
 +fn preserve_codex_plugin_sections(config_path: &Path, candidate: &str) -> Result<String, AppError> {
-+    if candidate.trim().is_empty() || !config_path.exists() {
++    if !config_path.exists() {
 +        return Ok(candidate.to_string());
 +    }
 +
