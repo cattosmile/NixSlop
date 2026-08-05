@@ -129,6 +129,9 @@ under `$XDG_STATE_HOME/cc-switch`, so CC Switch cannot take ownership of the
 user's real `~/.agents` directory. Its entire
 `XDG_CONFIG_HOME` view is backed by `$XDG_STATE_HOME/cc-switch/config`, and its
 desktop-handler writes are isolated under `$XDG_STATE_HOME/cc-switch/applications`.
+Provider routing writes also carry forward the live `[plugins]` and
+`[marketplaces]` sections, so an older account snapshot cannot unregister an
+already-installed OMX or Codex plugin.
 Consequently, CC Switch cannot modify the host's `mimeapps.list`, autostart
 entries, or other XDG configuration. NixSlop does not seed, import, or manage
 plugins or skills through CC Switch; the real Codex/OMX/Agents setup remains
