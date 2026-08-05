@@ -8,6 +8,7 @@ let
   packages = self.packages.${system};
   packageNames = builtins.attrNames packages;
   expectedPackageNames = [
+    "cc-switch"
     "codex"
     "codex-computer-use-linux"
     "codex-desktop"

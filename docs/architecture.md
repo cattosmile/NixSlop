@@ -41,9 +41,9 @@ not physical keyboard layouts.
 
 The following are intentionally stable:
 
-- Nine package outputs: `codex`, `codex-computer-use-linux`, `codex-desktop`,
-  the three Codex Desktop feature variants, `kimi-code`, `opencode`, and
-  `oh-my-codex`.
+- Ten package outputs: `codex`, `codex-computer-use-linux`, `codex-desktop`,
+  the three Codex Desktop feature variants, `kimi-code`, `opencode`,
+  `oh-my-codex`, and `cc-switch`.
 - Aggregate Home Manager modules `default` and `nixslop`.
 - Individual Home Manager module names and their historical option paths.
 - NixOS modules `default` and `codexComputerUse`.

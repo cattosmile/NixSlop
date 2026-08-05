@@ -58,6 +58,7 @@
         codexComputerUseHyprland = import ./modules/home-manager/codex-computer-use-hyprland.nix;
         kimiCode = import ./modules/home-manager/kimi-code.nix { inherit self; };
         codexOmx = import ./modules/home-manager/codex-omx.nix { inherit self; };
+        ccSwitch = import ./modules/home-manager/cc-switch.nix { inherit self; };
         default = nixslopHomeManagerModule;
         nixslop = nixslopHomeManagerModule;
       };

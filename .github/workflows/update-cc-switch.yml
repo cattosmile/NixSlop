@@ -1,0 +1,24 @@
+name: Update CC Switch
+
+on:
+  schedule:
+    - cron: '17 15 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nixslop-update-global
+  queue: max
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Run CC Switch update
+    uses: ./.github/workflows/update-reusable.yml
+    with:
+      program: cc-switch
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}

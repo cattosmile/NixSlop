@@ -12,6 +12,7 @@ let
   };
 in
 {
+  cc-switch = pkgs.callPackage ./cc-switch/package.nix { };
   inherit codex;
 
   codex-computer-use-linux = codexDesktop.computerUseBinaries;

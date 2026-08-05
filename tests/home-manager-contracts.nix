@@ -111,6 +111,86 @@ let
       }
     ]).config;
 
+  ccSwitchEval = mkHome [
+    self.homeManagerModules.ccSwitch
+    {
+      programs.ccSwitch.enable = true;
+    }
+  ];
+  ccSwitch = ccSwitchEval.config;
+  ccSwitchActivation = ccSwitch.home.activation.initializeCcSwitchSettings;
+
+  ccSwitchSharedCodexDir = builtins.tryEval (
+    builtins.deepSeq
+      (mkHome [
+        self.homeManagerModules.ccSwitch
+        {
+          programs.ccSwitch = {
+            enable = true;
+            codexConfigDir = "/home/module-test/.codex";
+          };
+        }
+      ]).activationPackage.drvPath
+      true
+  );
+
+  ccSwitchSharedAgentsDir = builtins.tryEval (
+    builtins.deepSeq
+      (mkHome [
+        self.homeManagerModules.ccSwitch
+        {
+          programs.ccSwitch = {
+            enable = true;
+            agentsConfigDir = "/home/module-test/.agents";
+          };
+        }
+      ]).activationPackage.drvPath
+      true
+  );
+
+  ccSwitchHomeAsConfigDir = builtins.tryEval (
+    builtins.deepSeq
+      (mkHome [
+        self.homeManagerModules.ccSwitch
+        {
+          programs.ccSwitch = {
+            enable = true;
+            codexConfigDir = "/home/module-test";
+          };
+        }
+      ]).activationPackage.drvPath
+      true
+  );
+
+  ccSwitchOverlappingConfigDirs = builtins.tryEval (
+    builtins.deepSeq
+      (mkHome [
+        self.homeManagerModules.ccSwitch
+        {
+          programs.ccSwitch = {
+            enable = true;
+            codexConfigDir = "/var/lib/cc-switch";
+            agentsConfigDir = "/var/lib/cc-switch/agents";
+          };
+        }
+      ]).activationPackage.drvPath
+      true
+  );
+
+  ccSwitchParentTraversalDir = builtins.tryEval (
+    builtins.deepSeq
+      (mkHome [
+        self.homeManagerModules.ccSwitch
+        {
+          programs.ccSwitch = {
+            enable = true;
+            codexConfigDir = "/var/lib/cc-switch/../codex";
+          };
+        }
+      ]).activationPackage.drvPath
+      true
+  );
+
   codexOmxSetupEval = mkHome [
     self.homeManagerModules.codexOmx
     {
@@ -344,6 +424,42 @@ let
 
   generatedFiles = pkgs.runCommand "nixslop-generated-file-contracts" { } ''
     cmp ${kimiConfigSource} ${expectedKimiConfig}
+    printf '%s\n' '{"language":"zh","theme":"dark","customKey":true}' > existing-cc-switch-settings.json
+    cp existing-cc-switch-settings.json existing-cc-switch-settings.before.json
+    ${pkgs.jq}/bin/jq \
+      --arg language en \
+      --arg codexConfigDir /home/module-test/.local/state/cc-switch/codex \
+      -n ' {
+        language: $language,
+        codexConfigDir: $codexConfigDir,
+        launchOnStartup: false,
+        useAppWindowControls: true,
+        visibleApps: {
+          claude: false,
+          "claude-desktop": false,
+          codex: true,
+          gemini: false,
+          grokbuild: false,
+          opencode: false,
+          openclaw: false,
+          hermes: false
+        },
+        showProfileSwitcher: false,
+        preferredTerminal: "alacritty"
+      }' > first-install-cc-switch-settings.json
+    cp existing-cc-switch-settings.before.json existing-cc-switch-settings.json
+    cmp existing-cc-switch-settings.before.json existing-cc-switch-settings.json
+    ${pkgs.jq}/bin/jq -e '
+      .language == "en"
+      and .codexConfigDir == "/home/module-test/.local/state/cc-switch/codex"
+      and .launchOnStartup == false
+      and .useAppWindowControls == true
+      and .visibleApps.codex == true
+      and ([.visibleApps.claude, .visibleApps."claude-desktop", .visibleApps.gemini, .visibleApps.grokbuild, .visibleApps.opencode, .visibleApps.openclaw, .visibleApps.hermes] | all(. == false))
+      and .showProfileSwitcher == false
+      and .preferredTerminal == "alacritty"
+    ' first-install-cc-switch-settings.json >/dev/null
+    ${pkgs.jq}/bin/jq -e '.language == "zh" and .theme == "dark" and .customKey == true' existing-cc-switch-settings.json >/dev/null
     grep -Fq '"model": "nixslop-contract-model"' ${
       nativeOpenCode.xdg.configFile."opencode/opencode.json".source
     }
@@ -373,6 +489,41 @@ let
         ".kimi-code/config.toml"
       ];
     assert !(builtins.hasAttr ".kimi-code/config.toml" kimiEmpty.home.file);
+    assert ccSwitch.programs.ccSwitch.language == "en";
+    assert
+      ccSwitch.programs.ccSwitch.codexConfigDir == "/home/module-test/.local/state/cc-switch/codex";
+    assert
+      ccSwitch.programs.ccSwitch.agentsConfigDir == "/home/module-test/.local/state/cc-switch/agents";
+    assert
+      ccSwitch.programs.ccSwitch.package.outPath == (self.packages.${system}.cc-switch.override {
+        defaultLanguage = "en";
+        defaultCodexConfigDir = "/home/module-test/.local/state/cc-switch/codex";
+        sandboxCodexDir = "/home/module-test/.local/state/cc-switch/codex";
+        sandboxAgentsDir = "/home/module-test/.local/state/cc-switch/agents";
+      }).outPath;
+    assert packageCount ccSwitch.programs.ccSwitch.package ccSwitch.home.packages == 1;
+    assert !(builtins.hasAttr ".cc-switch/settings.json" ccSwitch.home.file);
+    assert ccSwitchActivation.after == [ "writeBoundary" ];
+    assert lib.hasInfix ''settings_file="$settings_dir/settings.json"'' ccSwitchActivation.data;
+    assert lib.hasInfix "jq -e 'type == \"object\"'" ccSwitchActivation.data;
+    assert lib.hasInfix "--arg language" ccSwitchActivation.data;
+    assert lib.hasInfix "--arg codexConfigDir" ccSwitchActivation.data;
+    assert lib.hasInfix "/home/module-test/.local/state/cc-switch/codex" ccSwitchActivation.data;
+    assert lib.hasInfix "launchOnStartup: false" ccSwitchActivation.data;
+    assert lib.hasInfix "useAppWindowControls: true" ccSwitchActivation.data;
+    assert lib.hasInfix ''if [ -e "$settings_file" ]; then'' ccSwitchActivation.data;
+    assert lib.hasInfix "visibleApps" ccSwitchActivation.data;
+    assert lib.hasInfix "showProfileSwitcher: false" ccSwitchActivation.data;
+    assert lib.hasInfix "preferredTerminal: \"alacritty\"" ccSwitchActivation.data;
+    assert !lib.hasInfix ". + {" ccSwitchActivation.data;
+    assert lib.hasInfix ''mktemp "$settings_dir/.settings.json.XXXXXX"'' ccSwitchActivation.data;
+    assert lib.hasInfix ''mv "$temporary_file" "$settings_file"'' ccSwitchActivation.data;
+    assert lib.hasInfix ''chmod 600 "$temporary_file"'' ccSwitchActivation.data;
+    assert !ccSwitchSharedCodexDir.success;
+    assert !ccSwitchSharedAgentsDir.success;
+    assert !ccSwitchHomeAsConfigDir.success;
+    assert !ccSwitchOverlappingConfigDirs.success;
+    assert !ccSwitchParentTraversalDir.success;
     assert !codexOmxSetup.programs.codex.enable;
     assert
       codexOmxSetup.programs.codexOmx.ohMyCodexPackage.outPath
@@ -433,6 +584,8 @@ let
     assert lib.hasAttrByPath [ "programs" "openCode" "enable" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "kimiCode" "settings" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "codexOmx" "setupPlugin" ] aggregateEval.options;
+    assert lib.hasAttrByPath [ "programs" "ccSwitch" "codexConfigDir" ] aggregateEval.options;
+    assert lib.hasAttrByPath [ "programs" "ccSwitch" "agentsConfigDir" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "codexDesktopLinux" "enable" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "codexComputerUseHyprland" "enable" ] aggregateEval.options;
     # `homeManagerModules.nixslop` is a public behavioral alias for the
