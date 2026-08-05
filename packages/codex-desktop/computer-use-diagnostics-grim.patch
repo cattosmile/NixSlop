@@ -1,0 +1,62 @@
+--- a/computer-use-linux/src/diagnostics.rs
++++ b/computer-use-linux/src/diagnostics.rs
+@@ -100,6 +100,7 @@
+     pub xdg_runtime_dir: Option<String>,
+     pub gnome_shell_version: Check,
+     pub gnome_screenshot: Check,
++    pub grim: Check,
+ }
+ 
+ #[derive(Debug, Clone, Serialize, JsonSchema)]
+@@ -252,6 +253,11 @@
+     }
+ 
+     let mut screenshot_backends = Vec::new();
++    // Grim is the native Wayland backend and is preferred whenever available.
++    // This keeps Hyprland captures independent from GNOME Shell and portal UI.
++    if platform.grim.ok && platform_is_wayland(platform) {
++        screenshot_backends.push("grim".to_string());
++    }
+     if platform.gnome_shell_version.ok {
+         screenshot_backends.push("gnome_shell".to_string());
+     }
+@@ -593,6 +599,7 @@
+         xdg_runtime_dir: xdg_runtime_dir().map(|path| path.display().to_string()),
+         gnome_shell_version: command_check("gnome-shell", &["--version"]),
+         gnome_screenshot: command_check("gnome-screenshot", &["--version"]),
++        grim: command_check("grim", &["-h"]),
+     }
+ }
+ 
+@@ -1123,6 +1130,7 @@
+             xdg_runtime_dir: Some("/run/user/1000".to_string()),
+             gnome_shell_version: Check::ok("GNOME Shell 46.0"),
+             gnome_screenshot: Check::ok("gnome-screenshot 41.0"),
++            grim: Check::fail("missing"),
+         }
+     }
+ 
+@@ -1493,6 +1501,22 @@
+     }
+ 
+     #[test]
++    fn capability_map_prefers_grim_on_wayland() {
++        let mut platform = platform_report();
++        platform.xdg_current_desktop = Some("Hyprland".to_string());
++        platform.grim = Check::ok("grim 1.4");
++        let portals = portal_report(Check::fail("missing"));
++        let accessibility = accessibility_report(Check::ok("bus"), Check::ok("true"));
++        let windowing = windowing_report(false, false);
++        let input = input_report(false);
++
++        let capabilities = capability_map(&platform, &portals, &accessibility, &windowing, &input);
++
++        assert_eq!(capabilities.screenshot, vec!["grim"]);
++        assert_eq!(capabilities.preferred.screenshot.as_deref(), Some("grim"));
++    }
++
++    #[test]
+     fn capability_map_rejects_incompatible_ydotool_with_live_daemon() {
+         let platform = platform_report();
+         let portals = portal_report(Check::fail("missing"));
+
