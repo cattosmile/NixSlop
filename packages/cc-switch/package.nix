@@ -57,7 +57,10 @@ let
       hash = versionData.sourceHash;
     };
 
-    patches = [ ./official-account-slot-auth.patch ];
+    patches = [
+      ./official-account-slot-auth.patch
+      ./preserve-codex-plugin-config.patch
+    ];
 
     cargoRoot = "src-tauri";
     cargoHash = versionData.cargoHash;
