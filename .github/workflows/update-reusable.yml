@@ -38,7 +38,7 @@ jobs:
           PROGRAM: ${{ inputs.program }}
         run: |
           case "$PROGRAM" in
-            codex|codex-desktop|kimi-code|opencode|oh-my-codex|foundations)
+            codex|codex-desktop|kimi-code|opencode|oh-my-codex|cc-switch|foundations)
               ;;
             *)
               echo "::error::Unsupported update program: $PROGRAM"
@@ -143,6 +143,9 @@ jobs:
             oh-my-codex)
               nix develop -c packages/oh-my-codex/update.py
               ;;
+            cc-switch)
+              nix develop -c packages/cc-switch/update.py
+              ;;
             foundations)
               nix flake update nixpkgs systems home-manager
               ;;
@@ -226,6 +229,11 @@ jobs:
               oh-my-codex)
                 "$package_path/bin/omx" --version
                 ;;
+              cc-switch)
+                test -x "$package_path/bin/cc-switch"
+                "$package_path/bin/cc-switch-sandbox-probe"
+                nix develop -c scripts/smoke_cc_switch.sh "$package_path"
+                ;;
               *)
                 echo "::error::No smoke test is defined for $package"
                 return 1
@@ -256,6 +264,9 @@ jobs:
             oh-my-codex)
               packages=(oh-my-codex)
               ;;
+            cc-switch)
+              packages=(cc-switch)
+              ;;
             foundations)
               packages=(
                 codex
@@ -267,6 +278,7 @@ jobs:
                 kimi-code
                 opencode
                 oh-my-codex
+                cc-switch
               )
               ;;
           esac
@@ -355,6 +367,9 @@ jobs:
               git add -- \
                 packages/oh-my-codex/Cargo.lock \
                 packages/oh-my-codex/hashes.json
+              ;;
+            cc-switch)
+              git add -- packages/cc-switch/hashes.json
               ;;
           esac
 

@@ -1,5 +1,5 @@
 paths:
-  .github/workflows/update-{codex,codex-desktop,kimi-code,opencode,oh-my-codex,foundations}.yml:
+  .github/workflows/update-{cc-switch,codex,codex-desktop,kimi-code,opencode,oh-my-codex,foundations}.yml:
     ignore:
       # GitHub supports extended pending retention with `queue: max`; actionlint 1.7.12
       # still validates the older two-key concurrency schema.

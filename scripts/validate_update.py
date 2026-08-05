@@ -39,6 +39,7 @@ TARGETS: dict[str, TargetContract] = {
             }
         )
     ),
+    "cc-switch": TargetContract(frozenset({"packages/cc-switch/hashes.json"})),
     "foundations": TargetContract(
         frozenset({"flake.lock"}),
         frozenset({"home-manager", "nixpkgs", "systems"}),

@@ -79,6 +79,7 @@ jobs:
           - kimi-code
           - opencode
           - oh-my-codex
+          - cc-switch
     steps:
       - name: Checkout repository
         id: checkout
@@ -127,6 +128,11 @@ jobs:
               ;;
             oh-my-codex)
               "$package_path/bin/omx" --version
+              ;;
+            cc-switch)
+              test -x "$package_path/bin/cc-switch"
+              "$package_path/bin/cc-switch-sandbox-probe"
+              nix develop -c scripts/smoke_cc_switch.sh "$package_path"
               ;;
             *)
               echo "::error::No smoke test is defined for $PACKAGE"

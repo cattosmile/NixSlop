@@ -23,6 +23,7 @@ GitHub Actions cron expressions use UTC.
 | `Update OpenCode` | `opencode` | 07:47 daily |
 | `Update oh-my-codex` | `oh-my-codex` | 10:17 daily |
 | `Update Foundations` | `foundations` | 12:47 daily |
+| `Update CC Switch` | `cc-switch` | 15:17 daily |
 | `Update Health` | sentinel | 23:47 daily |
 
 Every update caller also supports manual dispatch. Dispatch the named caller,
@@ -41,7 +42,8 @@ paths outside these allowlists:
 | `kimi-code` | Kimi updater | `packages/kimi-code/hashes.json` | `kimi-code` |
 | `opencode` | Update `opencode` input | `flake.lock` | `opencode` |
 | `oh-my-codex` | OMX updater | OMX `hashes.json` and `Cargo.lock` | `oh-my-codex` |
-| `foundations` | Update `nixpkgs`, `systems`, and `home-manager` inputs | `flake.lock` | all nine public package outputs |
+| `cc-switch` | Native source, Cargo, and pnpm hash updater | `packages/cc-switch/hashes.json` | `cc-switch` |
+| `foundations` | Update `nixpkgs`, `systems`, and `home-manager` inputs | `flake.lock` | all ten public package outputs |
 
 For lock-file targets, the validator compares semantic input graphs rather than
 generated node names. Protected root-input closures must remain identical, the
@@ -57,15 +59,18 @@ Every non-empty update runs, in order:
 5. The real patch-source and packaged Computer Use desktop-plugin checks for
    desktop/foundation changes.
 6. Target package builds and executable smoke tests. Foundations builds all
-   nine outputs; Codex also builds OMX because the wrapper embeds Codex.
+   ten outputs; Codex also builds OMX because the wrapper embeds Codex. CC
+   Switch additionally starts the real native GUI for 15 seconds under Xvfb
+   and D-Bus, so a source update that compiles but crashes at startup is not
+   merged.
 
 The `queue: max` key is supported by GitHub Actions but is newer than the
 actionlint 1.7.12 concurrency schema. `.github/actionlint.yaml` suppresses only
-that exact stale-schema diagnostic and only for the six fixed callers; every
+that exact stale-schema diagnostic and only for the seven fixed callers; every
 other actionlint diagnostic remains enabled.
 
 The normal `Check` workflow independently evaluates contracts and runs an
-all-nine build matrix on pull requests and pushes to `main`.
+all-ten build matrix on pull requests and pushes to `main`.
 
 ## Pull request state machine
 
@@ -131,7 +136,7 @@ PRs, use a narrowly scoped GitHub App or PAT rather than weakening validation.
 ## Stable health signal for Hermes
 
 `Update Health` has read-only `actions: read` and `contents: read` permissions.
-It queries the latest **scheduled** run of each of the six exact workflow names;
+It queries the latest **scheduled** run of each of the seven exact workflow names;
 manual successes cannot mask a missed daily schedule. Every latest run must be
 `completed` with conclusion `success`, and its schedule-entry `created_at`
 timestamp must be no more than 36 hours old. The creation time is deliberate:
@@ -141,7 +146,7 @@ and the serialized update queue while detecting a missed day.
 
 Hermes should monitor the workflow named `Update Health`. It must validate both
 the run conclusion and that the newest `Update Health` run itself was created
-no more than 36 hours ago. The sentinel validates the six updater workflows,
+no more than 36 hours ago. The sentinel validates the seven updater workflows,
 but a disabled or unscheduled sentinel cannot report its own absence. Do not
 configure Hermes against a repository-wide generic latest run: unrelated CI or
 manual dispatches would make that signal unstable.

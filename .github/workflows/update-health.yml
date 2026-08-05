@@ -39,6 +39,7 @@ jobs:
             "Update Kimi Code|update-kimi-code.yml"
             "Update OpenCode|update-opencode.yml"
             "Update oh-my-codex|update-oh-my-codex.yml"
+            "Update CC Switch|update-cc-switch.yml"
             "Update Foundations|update-foundations.yml"
           )
 
