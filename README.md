@@ -115,15 +115,19 @@ credential or environment mechanism outside the declarative store. If you set
 
 `programs.ccSwitch.enable = true` installs CC Switch as a native Nix source
 build against Nixpkgs' WebKitGTK stack. No upstream AppImage or Debian package
-is used. Home Manager atomically initializes `~/.cc-switch/settings.json`
-with the English UI and an isolated Codex configuration directory at
-`$XDG_STATE_HOME/cc-switch/codex`. The package sandbox also redirects Codex and
-Agents state beneath `$XDG_STATE_HOME/cc-switch`, so CC Switch cannot take
-ownership of the user's real `~/.codex` or `~/.agents` directories. Its entire
+is used. Home Manager atomically initializes `~/.cc-switch/settings.json` with
+the English UI and the native Codex configuration directory at `~/.codex`.
+Sharing that directory is intentional: Codex itself stores the ChatGPT OAuth
+session in `~/.codex/auth.json`, so CC Switch and a separately launched Codex
+see the same login and provider-account slots. The package sandbox still
+redirects Agents state beneath `$XDG_STATE_HOME/cc-switch`, so CC Switch cannot
+take ownership of the user's real `~/.agents` directory. Its entire
 `XDG_CONFIG_HOME` view is backed by `$XDG_STATE_HOME/cc-switch/config`, and its
 desktop-handler writes are isolated under `$XDG_STATE_HOME/cc-switch/applications`.
 Consequently, CC Switch cannot modify the host's `mimeapps.list`, autostart
-entries, or other XDG configuration.
+entries, or other XDG configuration. NixSlop does not seed, import, or manage
+skills through CC Switch; the real Codex/Agents skill setup remains owned by
+the normal Home Manager configuration.
 
 The settings file remains mutable so CC Switch can preserve and update its
 other device-local preferences. Home Manager seeds `language`,
@@ -139,11 +143,14 @@ The package sandbox redirects both autostart and desktop-handler registration,
 so neither can persist an unmanaged launch of the native binary in the user's
 real XDG directories.
 
-The `programs.ccSwitch.codexConfigDir` and `agentsConfigDir` options may select
-other isolated locations; the package override mounts those exact paths into
-its sandbox. The module rejects the user's shared `~/.codex` and `~/.agents`
-directories. This keeps shared configuration ownership from becoming an
-accidental declarative default.
+The `programs.ccSwitch.codexConfigDir` option can select another absolute,
+isolated location; the package override mounts that exact path into its
+sandbox. Choose this only when a separate Codex installation is intended,
+because native Codex logins will then be stored separately. `agentsConfigDir`
+remains isolated by default and the module rejects paths overlapping the real
+`~/.agents` directory. Existing settings are migrated from the former
+`$XDG_STATE_HOME/cc-switch/codex` default to `~/.codex` once; user-edited
+settings are otherwise preserved.
 
 ## Codex Desktop Computer Use on NixOS
 

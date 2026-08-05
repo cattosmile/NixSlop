@@ -118,6 +118,7 @@ let
     }
   ];
   ccSwitch = ccSwitchEval.config;
+  ccSwitchMigration = ccSwitch.home.activation.migrateCcSwitchCodexConfigDir;
   ccSwitchActivation = ccSwitch.home.activation.initializeCcSwitchSettings;
 
   ccSwitchSharedCodexDir = builtins.tryEval (
@@ -422,13 +423,25 @@ let
     telemetry = false
   '';
 
+  ccSwitchMigrationScript =
+    lib.replaceStrings [ "/home/module-test" ] [ "$out/migration-home" ]
+      ccSwitchMigration.data;
+
   generatedFiles = pkgs.runCommand "nixslop-generated-file-contracts" { } ''
     cmp ${kimiConfigSource} ${expectedKimiConfig}
+    mkdir -p "$out/migration-home/.cc-switch"
+    printf '{"codexConfigDir":"%s","keep":true}\n' \
+      "$out/migration-home/.local/state/cc-switch/codex" \
+      > "$out/migration-home/.cc-switch/settings.json"
+    ${ccSwitchMigrationScript}
+    ${pkgs.jq}/bin/jq --arg expected "$out/migration-home/.codex" -e '
+      .codexConfigDir == $expected and .keep == true
+    ' "$out/migration-home/.cc-switch/settings.json" >/dev/null
     printf '%s\n' '{"language":"zh","theme":"dark","customKey":true}' > existing-cc-switch-settings.json
     cp existing-cc-switch-settings.json existing-cc-switch-settings.before.json
     ${pkgs.jq}/bin/jq \
       --arg language en \
-      --arg codexConfigDir /home/module-test/.local/state/cc-switch/codex \
+      --arg codexConfigDir /home/module-test/.codex \
       -n ' {
         language: $language,
         codexConfigDir: $codexConfigDir,
@@ -451,7 +464,7 @@ let
     cmp existing-cc-switch-settings.before.json existing-cc-switch-settings.json
     ${pkgs.jq}/bin/jq -e '
       .language == "en"
-      and .codexConfigDir == "/home/module-test/.local/state/cc-switch/codex"
+      and .codexConfigDir == "/home/module-test/.codex"
       and .launchOnStartup == false
       and .useAppWindowControls == true
       and .visibleApps.codex == true
@@ -490,25 +503,28 @@ let
       ];
     assert !(builtins.hasAttr ".kimi-code/config.toml" kimiEmpty.home.file);
     assert ccSwitch.programs.ccSwitch.language == "en";
-    assert
-      ccSwitch.programs.ccSwitch.codexConfigDir == "/home/module-test/.local/state/cc-switch/codex";
+    assert ccSwitch.programs.ccSwitch.codexConfigDir == "/home/module-test/.codex";
     assert
       ccSwitch.programs.ccSwitch.agentsConfigDir == "/home/module-test/.local/state/cc-switch/agents";
     assert
       ccSwitch.programs.ccSwitch.package.outPath == (self.packages.${system}.cc-switch.override {
         defaultLanguage = "en";
-        defaultCodexConfigDir = "/home/module-test/.local/state/cc-switch/codex";
-        sandboxCodexDir = "/home/module-test/.local/state/cc-switch/codex";
+        defaultCodexConfigDir = "/home/module-test/.codex";
+        sandboxCodexDir = "/home/module-test/.codex";
         sandboxAgentsDir = "/home/module-test/.local/state/cc-switch/agents";
+        allowSharedCodexDir = true;
       }).outPath;
     assert packageCount ccSwitch.programs.ccSwitch.package ccSwitch.home.packages == 1;
     assert !(builtins.hasAttr ".cc-switch/settings.json" ccSwitch.home.file);
-    assert ccSwitchActivation.after == [ "writeBoundary" ];
+    assert ccSwitchMigration.after == [ "writeBoundary" ];
+    assert lib.hasInfix ".codexConfigDir == $legacy" ccSwitchMigration.data;
+    assert lib.hasInfix ".codexConfigDir = $shared" ccSwitchMigration.data;
+    assert ccSwitchActivation.after == [ "migrateCcSwitchCodexConfigDir" ];
     assert lib.hasInfix ''settings_file="$settings_dir/settings.json"'' ccSwitchActivation.data;
     assert lib.hasInfix "jq -e 'type == \"object\"'" ccSwitchActivation.data;
     assert lib.hasInfix "--arg language" ccSwitchActivation.data;
     assert lib.hasInfix "--arg codexConfigDir" ccSwitchActivation.data;
-    assert lib.hasInfix "/home/module-test/.local/state/cc-switch/codex" ccSwitchActivation.data;
+    assert lib.hasInfix "/home/module-test/.codex" ccSwitchActivation.data;
     assert lib.hasInfix "launchOnStartup: false" ccSwitchActivation.data;
     assert lib.hasInfix "useAppWindowControls: true" ccSwitchActivation.data;
     assert lib.hasInfix ''if [ -e "$settings_file" ]; then'' ccSwitchActivation.data;
@@ -519,7 +535,7 @@ let
     assert lib.hasInfix ''mktemp "$settings_dir/.settings.json.XXXXXX"'' ccSwitchActivation.data;
     assert lib.hasInfix ''mv "$temporary_file" "$settings_file"'' ccSwitchActivation.data;
     assert lib.hasInfix ''chmod 600 "$temporary_file"'' ccSwitchActivation.data;
-    assert !ccSwitchSharedCodexDir.success;
+    assert ccSwitchSharedCodexDir.success;
     assert !ccSwitchSharedAgentsDir.success;
     assert !ccSwitchHomeAsConfigDir.success;
     assert !ccSwitchOverlappingConfigDirs.success;
