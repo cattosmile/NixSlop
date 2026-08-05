@@ -1,10 +1,12 @@
 {
   jq,
   lib,
+  makeWrapper,
   patch,
   runCommandLocal,
   rustPlatform,
   stdenv,
+  grim,
   codexDesktopLinux,
   enableComputerUseUi ? false,
   linuxFeatureIds ? [ ],
@@ -43,12 +45,17 @@ let
         chmod -R u+w "$out"
 
         patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use.patch}
+        patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use-grim.patch}
+        patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use-diagnostics-grim.patch}
 
         registry="$out/computer-use-linux/src/windowing/registry.rs"
         hyprland="$out/computer-use-linux/src/windowing/backends/hyprland.rs"
+        screenshot="$out/computer-use-linux/src/screenshot.rs"
         grep -Fq 'HYPRLAND_BACKEND => hyprland::move_window' "$registry"
         grep -Fq 'HYPRLAND_BACKEND => hyprland::resize_window' "$registry"
         grep -Fq 'hl.dsp.window.{dispatcher}' "$hyprland"
+        grep -Fq 'capture_with_grim' "$screenshot"
+        grep -Fq 'Self::Grim' "$screenshot"
         test "$(sed -n '/const BACKEND_ORDER/,/];/p' "$registry" | grep -n 'BackendKind::' | head -n 1 | cut -d: -f2-)" = \
           '    BackendKind::Hyprland,'
       '';
@@ -67,6 +74,7 @@ let
       "--bins"
     ];
     doCheck = false;
+    nativeBuildInputs = [ makeWrapper ];
 
     installPhase = ''
       runHook preInstall
@@ -74,7 +82,9 @@ let
       if [ ! -d "$release_dir" ]; then
         release_dir="target/release"
       fi
-      install -Dm0755 "$release_dir/codex-computer-use-linux" "$out/bin/codex-computer-use-linux"
+      install -Dm0755 "$release_dir/codex-computer-use-linux" "$out/bin/codex-computer-use-linux.bin"
+      makeWrapper "$out/bin/codex-computer-use-linux.bin" "$out/bin/codex-computer-use-linux" \
+        --prefix PATH : ${lib.makeBinPath [ grim ]}
       install -Dm0755 "$release_dir/codex-computer-use-cosmic" "$out/bin/codex-computer-use-cosmic"
       install -Dm0755 "$release_dir/codex-chrome-extension-host" "$out/bin/codex-chrome-extension-host"
       runHook postInstall

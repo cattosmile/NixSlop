@@ -40,6 +40,7 @@ in
     plugin="${codexDesktop}/opt/codex-desktop/resources/plugins/openai-bundled/plugins/computer-use"
     test -f "$plugin/.codex-plugin/plugin.json"
     test -x "$plugin/bin/codex-computer-use-linux"
+    grep -Fq 'grim' "$plugin/bin/codex-computer-use-linux"
     test -x "$plugin/bin/codex-computer-use-cosmic"
     test -x "$plugin/bin/codex-chrome-extension-host"
     grep -Fq '"hyprland"' "$plugin/.codex-plugin/plugin.json"
