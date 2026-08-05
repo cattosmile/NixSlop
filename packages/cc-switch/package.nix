@@ -196,18 +196,33 @@ stdenvNoCC.mkDerivation {
 
     [[ $PWD == "$HOME" ]]
     [[ $(<"$HOME/.codex/sentinel") == "isolated-codex" ]]
+    [[ $(<"$HOME/.codex/plugins/sentinel") == "isolated-codex-plugins" ]]
+    [[ $(<"$HOME/.codex/.tmp/sentinel") == "isolated-codex-tmp" ]]
+    [[ $(<"$HOME/.codex/agents/sentinel") == "isolated-codex-agents" ]]
+    [[ $(<"$HOME/.codex/.omx/sentinel") == "isolated-codex-omx" ]]
     [[ $(<"$HOME/.agents/sentinel") == "isolated-agents" ]]
+    [[ $(<"$HOME/.cc-switch/skills/sentinel") == "isolated-cc-switch-skills" ]]
     [[ $(<"$XDG_CONFIG_HOME/autostart/sentinel") == "isolated-autostart" ]]
     [[ $(<"$HOME/.config/autostart/sentinel") == "isolated-autostart" ]]
     [[ $(<"$XDG_CONFIG_HOME/mimeapps.list") == "isolated-mimeapps" ]]
     [[ $(<"$XDG_DATA_HOME/applications/sentinel") == "isolated-applications" ]]
     [[ ! -e "$HOME/.codex/host-only" ]]
+    [[ ! -e "$HOME/.codex/plugins/host-only" ]]
+    [[ ! -e "$HOME/.codex/.tmp/host-only" ]]
+    [[ ! -e "$HOME/.codex/agents/host-only" ]]
+    [[ ! -e "$HOME/.codex/.omx/host-only" ]]
     [[ ! -e "$HOME/.agents/host-only" ]]
+    [[ ! -e "$HOME/.cc-switch/skills/host-only" ]]
     [[ ! -e "$XDG_CONFIG_HOME/autostart/host-only" ]]
     [[ ! -e "$HOME/.config/autostart/host-only" ]]
     [[ ! -e "$XDG_DATA_HOME/applications/host-only" ]]
     printf "%s\n" sandbox-codex > "$HOME/.codex/sandbox-write"
+    printf "%s\n" sandbox-codex-plugins > "$HOME/.codex/plugins/sandbox-write"
+    printf "%s\n" sandbox-codex-tmp > "$HOME/.codex/.tmp/sandbox-write"
+    printf "%s\n" sandbox-codex-agents > "$HOME/.codex/agents/sandbox-write"
+    printf "%s\n" sandbox-codex-omx > "$HOME/.codex/.omx/sandbox-write"
     printf "%s\n" sandbox-agents > "$HOME/.agents/sandbox-write"
+    printf "%s\n" sandbox-cc-switch-skills > "$HOME/.cc-switch/skills/sandbox-write"
     printf "%s\n" sandbox-autostart > "$XDG_CONFIG_HOME/autostart/sandbox-write"
     printf "%s\n" sandbox-legacy-autostart > "$HOME/.config/autostart/legacy-sandbox-write"
     printf "%s\n" sandbox-mimeapps > "$XDG_CONFIG_HOME/mimeapps.list"
@@ -248,12 +263,22 @@ stdenvNoCC.mkDerivation {
         exit 2
       fi
       if [[ $(<"$probe_root/state/cc-switch/codex/sentinel") != isolated-codex \
+        || $(<"$probe_root/state/cc-switch/codex-plugins/sentinel") != isolated-codex-plugins \
+        || $(<"$probe_root/state/cc-switch/codex-tmp/sentinel") != isolated-codex-tmp \
+        || $(<"$probe_root/state/cc-switch/codex-agents/sentinel") != isolated-codex-agents \
+        || $(<"$probe_root/state/cc-switch/codex-omx/sentinel") != isolated-codex-omx \
         || $(<"$probe_root/state/cc-switch/agents/sentinel") != isolated-agents \
+        || $(<"$probe_root/state/cc-switch/skills/sentinel") != isolated-cc-switch-skills \
         || $(<"$probe_root/state/cc-switch/config/autostart/sentinel") != isolated-autostart \
         || $(<"$probe_root/state/cc-switch/config/mimeapps.list") != isolated-mimeapps \
         || $(<"$probe_root/state/cc-switch/applications/sentinel") != isolated-applications \
         || $(<"$probe_root/home/.codex/host-only") != host-codex \
+        || $(<"$probe_root/home/.codex/plugins/host-only") != host-codex-plugins \
+        || $(<"$probe_root/home/.codex/.tmp/host-only") != host-codex-tmp \
+        || $(<"$probe_root/home/.codex/agents/host-only") != host-codex-agents \
+        || $(<"$probe_root/home/.codex/.omx/host-only") != host-codex-omx \
         || $(<"$probe_root/home/.agents/host-only") != host-agents \
+        || $(<"$probe_root/home/.cc-switch/skills/host-only") != host-cc-switch-skills \
         || $(<"$probe_root/home/.config/autostart/host-only") != host-legacy-autostart \
         || $(<"$probe_root/config/autostart/host-only") != host-autostart \
         || $(<"$probe_root/config/mimeapps.list") != host-mimeapps \
@@ -298,7 +323,15 @@ stdenvNoCC.mkDerivation {
     fi
     config_state="$state_root/config"
     applications_state="$state_root/applications"
+    codex_plugins_state="$state_root/codex-plugins"
+    codex_tmp_state="$state_root/codex-tmp"
+    codex_agents_state="$state_root/codex-agents"
+    codex_omx_state="$state_root/codex-omx"
+    cc_switch_skills_state="$state_root/skills"
     if [[ $codex_state != /* || $agents_state != /* \
+      || $codex_plugins_state != /* || $codex_tmp_state != /* \
+      || $codex_agents_state != /* || $codex_omx_state != /* \
+      || $cc_switch_skills_state != /* \
       || $config_state != /* || $applications_state != /* ]]; then
       echo "cc-switch: sandbox state directories must be absolute paths" >&2
       exit 2
@@ -306,7 +339,12 @@ stdenvNoCC.mkDerivation {
 
     state_paths=(
       "$codex_state"
+      "$codex_plugins_state"
+      "$codex_tmp_state"
+      "$codex_agents_state"
+      "$codex_omx_state"
       "$agents_state"
+      "$cc_switch_skills_state"
       "$config_state"
       "$applications_state"
     )
@@ -318,11 +356,21 @@ stdenvNoCC.mkDerivation {
     done
 
     codex_state_real="$(${coreutils}/bin/realpath -m -- "$codex_state")"
+    codex_plugins_state_real="$(${coreutils}/bin/realpath -m -- "$codex_plugins_state")"
+    codex_tmp_state_real="$(${coreutils}/bin/realpath -m -- "$codex_tmp_state")"
+    codex_agents_state_real="$(${coreutils}/bin/realpath -m -- "$codex_agents_state")"
+    codex_omx_state_real="$(${coreutils}/bin/realpath -m -- "$codex_omx_state")"
     agents_state_real="$(${coreutils}/bin/realpath -m -- "$agents_state")"
+    cc_switch_skills_state_real="$(${coreutils}/bin/realpath -m -- "$cc_switch_skills_state")"
     config_state_real="$(${coreutils}/bin/realpath -m -- "$config_state")"
     applications_state_real="$(${coreutils}/bin/realpath -m -- "$applications_state")"
     protected_codex="$(${coreutils}/bin/realpath -m -- "$HOME/.codex")"
+    protected_codex_plugins="$(${coreutils}/bin/realpath -m -- "$HOME/.codex/plugins")"
+    protected_codex_tmp="$(${coreutils}/bin/realpath -m -- "$HOME/.codex/.tmp")"
+    protected_codex_agents="$(${coreutils}/bin/realpath -m -- "$HOME/.codex/agents")"
+    protected_codex_omx="$(${coreutils}/bin/realpath -m -- "$HOME/.codex/.omx")"
     protected_agents="$(${coreutils}/bin/realpath -m -- "$HOME/.agents")"
+    protected_cc_switch_skills="$(${coreutils}/bin/realpath -m -- "$HOME/.cc-switch/skills")"
     protected_config="$(${coreutils}/bin/realpath -m -- "$config_home")"
     protected_legacy_config="$(${coreutils}/bin/realpath -m -- "$legacy_config_home")"
     protected_applications="$(${coreutils}/bin/realpath -m -- "$data_home/applications")"
@@ -333,7 +381,12 @@ stdenvNoCC.mkDerivation {
 
     state_dirs=(
       "$codex_state_real"
+      "$codex_plugins_state_real"
+      "$codex_tmp_state_real"
+      "$codex_agents_state_real"
+      "$codex_omx_state_real"
       "$agents_state_real"
+      "$cc_switch_skills_state_real"
       "$config_state_real"
       "$applications_state_real"
     )
@@ -377,9 +430,13 @@ stdenvNoCC.mkDerivation {
 
     umask 077
     ${coreutils}/bin/mkdir -p -- \
-      "$state_root" "$codex_state" "$agents_state" \
+      "$state_root" "$codex_state" "$codex_plugins_state" \
+      "$codex_tmp_state" "$codex_agents_state" "$codex_omx_state" \
+      "$agents_state" "$cc_switch_skills_state" \
       "$config_state" "$applications_state" \
-      "$HOME/.codex" "$HOME/.agents" \
+      "$HOME/.codex" "$HOME/.codex/plugins" "$HOME/.codex/.tmp" \
+      "$HOME/.codex/agents" "$HOME/.codex/.omx" \
+      "$HOME/.agents" "$HOME/.cc-switch" "$HOME/.cc-switch/skills" \
       "$config_home" "$legacy_config_home" "$data_home/applications"
 
     if $allow_shared_codex; then
@@ -420,6 +477,14 @@ stdenvNoCC.mkDerivation {
       codex_binds=(--bind "$codex_state_real" "$protected_codex")
     fi
 
+    codex_plugin_binds=(
+      --bind "$codex_plugins_state_real" "$protected_codex_plugins"
+      --bind "$codex_tmp_state_real" "$protected_codex_tmp"
+      --bind "$codex_agents_state_real" "$protected_codex_agents"
+      --bind "$codex_omx_state_real" "$protected_codex_omx"
+    )
+    cc_switch_skills_binds=(--bind "$cc_switch_skills_state_real" "$protected_cc_switch_skills")
+
     exec ${bubblewrap}/bin/bwrap \
       --die-with-parent \
       --new-session \
@@ -427,7 +492,9 @@ stdenvNoCC.mkDerivation {
       --dev-bind /dev /dev \
       --proc /proc \
       "''${codex_binds[@]}" \
+      "''${codex_plugin_binds[@]}" \
       --bind "$agents_state_real" "$protected_agents" \
+      "''${cc_switch_skills_binds[@]}" \
       "''${config_binds[@]}" \
       --bind "$applications_state_real" "$protected_applications" \
       --setenv HOME "$HOME" \
@@ -462,23 +529,43 @@ stdenvNoCC.mkDerivation {
     umask 077
     ${coreutils}/bin/mkdir -p \
       "\$probe_home/.codex" \
+      "\$probe_home/.codex/plugins" \
+      "\$probe_home/.codex/.tmp" \
+      "\$probe_home/.codex/agents" \
+      "\$probe_home/.codex/.omx" \
       "\$probe_home/.agents" \
+      "\$probe_home/.cc-switch/skills" \
       "\$probe_home/.config/autostart" \
       "\$probe_config/autostart" \
       "\$probe_data/applications" \
       "\$probe_state/cc-switch/codex" \
+      "\$probe_state/cc-switch/codex-plugins" \
+      "\$probe_state/cc-switch/codex-tmp" \
+      "\$probe_state/cc-switch/codex-agents" \
+      "\$probe_state/cc-switch/codex-omx" \
       "\$probe_state/cc-switch/agents" \
+      "\$probe_state/cc-switch/skills" \
       "\$probe_state/cc-switch/config/autostart" \
       "\$probe_state/cc-switch/applications"
 
     ${coreutils}/bin/printf '%s\n' host-codex > "\$probe_home/.codex/host-only"
+    ${coreutils}/bin/printf '%s\n' host-codex-plugins > "\$probe_home/.codex/plugins/host-only"
+    ${coreutils}/bin/printf '%s\n' host-codex-tmp > "\$probe_home/.codex/.tmp/host-only"
+    ${coreutils}/bin/printf '%s\n' host-codex-agents > "\$probe_home/.codex/agents/host-only"
+    ${coreutils}/bin/printf '%s\n' host-codex-omx > "\$probe_home/.codex/.omx/host-only"
     ${coreutils}/bin/printf '%s\n' host-agents > "\$probe_home/.agents/host-only"
+    ${coreutils}/bin/printf '%s\n' host-cc-switch-skills > "\$probe_home/.cc-switch/skills/host-only"
     ${coreutils}/bin/printf '%s\n' host-legacy-autostart > "\$probe_home/.config/autostart/host-only"
     ${coreutils}/bin/printf '%s\n' host-autostart > "\$probe_config/autostart/host-only"
     ${coreutils}/bin/printf '%s\n' host-mimeapps > "\$probe_config/mimeapps.list"
     ${coreutils}/bin/printf '%s\n' host-applications > "\$probe_data/applications/host-only"
     ${coreutils}/bin/printf '%s\n' isolated-codex > "\$probe_state/cc-switch/codex/sentinel"
+    ${coreutils}/bin/printf '%s\n' isolated-codex-plugins > "\$probe_state/cc-switch/codex-plugins/sentinel"
+    ${coreutils}/bin/printf '%s\n' isolated-codex-tmp > "\$probe_state/cc-switch/codex-tmp/sentinel"
+    ${coreutils}/bin/printf '%s\n' isolated-codex-agents > "\$probe_state/cc-switch/codex-agents/sentinel"
+    ${coreutils}/bin/printf '%s\n' isolated-codex-omx > "\$probe_state/cc-switch/codex-omx/sentinel"
     ${coreutils}/bin/printf '%s\n' isolated-agents > "\$probe_state/cc-switch/agents/sentinel"
+    ${coreutils}/bin/printf '%s\n' isolated-cc-switch-skills > "\$probe_state/cc-switch/skills/sentinel"
     ${coreutils}/bin/printf '%s\n' isolated-autostart > "\$probe_state/cc-switch/config/autostart/sentinel"
     ${coreutils}/bin/printf '%s\n' isolated-mimeapps > "\$probe_state/cc-switch/config/mimeapps.list"
     ${coreutils}/bin/printf '%s\n' isolated-applications > "\$probe_state/cc-switch/applications/sentinel"
@@ -507,18 +594,33 @@ stdenvNoCC.mkDerivation {
     )
 
     [[ \$(<"\$probe_home/.codex/host-only") == host-codex ]]
+    [[ \$(<"\$probe_home/.codex/plugins/host-only") == host-codex-plugins ]]
+    [[ \$(<"\$probe_home/.codex/.tmp/host-only") == host-codex-tmp ]]
+    [[ \$(<"\$probe_home/.codex/agents/host-only") == host-codex-agents ]]
+    [[ \$(<"\$probe_home/.codex/.omx/host-only") == host-codex-omx ]]
     [[ \$(<"\$probe_home/.agents/host-only") == host-agents ]]
+    [[ \$(<"\$probe_home/.cc-switch/skills/host-only") == host-cc-switch-skills ]]
     [[ \$(<"\$probe_home/.config/autostart/host-only") == host-legacy-autostart ]]
     [[ \$(<"\$probe_config/autostart/host-only") == host-autostart ]]
     [[ \$(<"\$probe_config/mimeapps.list") == host-mimeapps ]]
     [[ \$(<"\$probe_data/applications/host-only") == host-applications ]]
     [[ ! -e "\$probe_home/.codex/sandbox-write" ]]
+    [[ ! -e "\$probe_home/.codex/plugins/sandbox-write" ]]
+    [[ ! -e "\$probe_home/.codex/.tmp/sandbox-write" ]]
+    [[ ! -e "\$probe_home/.codex/agents/sandbox-write" ]]
+    [[ ! -e "\$probe_home/.codex/.omx/sandbox-write" ]]
     [[ ! -e "\$probe_home/.agents/sandbox-write" ]]
+    [[ ! -e "\$probe_home/.cc-switch/skills/sandbox-write" ]]
     [[ ! -e "\$probe_home/.config/autostart/legacy-sandbox-write" ]]
     [[ ! -e "\$probe_config/autostart/sandbox-write" ]]
     [[ ! -e "\$probe_data/applications/sandbox-write" ]]
     [[ \$(<"\$probe_state/cc-switch/codex/sandbox-write") == sandbox-codex ]]
+    [[ \$(<"\$probe_state/cc-switch/codex-plugins/sandbox-write") == sandbox-codex-plugins ]]
+    [[ \$(<"\$probe_state/cc-switch/codex-tmp/sandbox-write") == sandbox-codex-tmp ]]
+    [[ \$(<"\$probe_state/cc-switch/codex-agents/sandbox-write") == sandbox-codex-agents ]]
+    [[ \$(<"\$probe_state/cc-switch/codex-omx/sandbox-write") == sandbox-codex-omx ]]
     [[ \$(<"\$probe_state/cc-switch/agents/sandbox-write") == sandbox-agents ]]
+    [[ \$(<"\$probe_state/cc-switch/skills/sandbox-write") == sandbox-cc-switch-skills ]]
     [[ \$(<"\$probe_state/cc-switch/config/autostart/sandbox-write") == sandbox-autostart ]]
     [[ \$(<"\$probe_state/cc-switch/config/autostart/legacy-sandbox-write") == sandbox-legacy-autostart ]]
     [[ \$(<"\$probe_state/cc-switch/config/mimeapps.list") == sandbox-mimeapps ]]
