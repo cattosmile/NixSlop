@@ -86,8 +86,10 @@ in
       description = ''
         Codex configuration directory managed by CC Switch. The default is
         the user's normal ~/.codex directory so native Codex logins and
-        provider switching use the same auth.json. Set this to an isolated
-        path if a fully separate Codex instance is required.
+        provider switching use the same auth.json. The package sandbox keeps
+        Codex plugin/OMX state separate even when this directory is shared.
+        Set this to an isolated path if a fully separate Codex instance is
+        required.
       '';
     };
 

@@ -119,15 +119,20 @@ is used. Home Manager atomically initializes `~/.cc-switch/settings.json` with
 the English UI and the native Codex configuration directory at `~/.codex`.
 Sharing that directory is intentional: Codex itself stores the ChatGPT OAuth
 session in `~/.codex/auth.json`, so CC Switch and a separately launched Codex
-see the same login and provider-account slots. The package sandbox still
-redirects Agents state beneath `$XDG_STATE_HOME/cc-switch`, so CC Switch cannot
-take ownership of the user's real `~/.agents` directory. Its entire
+see the same login and provider-account slots. Only that routing/account data
+and the mutable provider configuration stay shared. The package sandbox
+redirects Codex's plugin cache, `.tmp` marketplace data, native agent TOMLs,
+and `.omx` state beneath `$XDG_STATE_HOME/cc-switch`, so CC Switch cannot
+take ownership of OMX's plugin installation. Its CC Switch skill store is
+also redirected to the same isolated state root, and Agents state remains
+under `$XDG_STATE_HOME/cc-switch`, so CC Switch cannot take ownership of the
+user's real `~/.agents` directory. Its entire
 `XDG_CONFIG_HOME` view is backed by `$XDG_STATE_HOME/cc-switch/config`, and its
 desktop-handler writes are isolated under `$XDG_STATE_HOME/cc-switch/applications`.
 Consequently, CC Switch cannot modify the host's `mimeapps.list`, autostart
 entries, or other XDG configuration. NixSlop does not seed, import, or manage
-skills through CC Switch; the real Codex/Agents skill setup remains owned by
-the normal Home Manager configuration.
+plugins or skills through CC Switch; the real Codex/OMX/Agents setup remains
+owned by OMX and the normal Home Manager configuration.
 
 The settings file remains mutable so CC Switch can preserve and update its
 other device-local preferences. Home Manager seeds `language`,
