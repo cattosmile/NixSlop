@@ -12,8 +12,6 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     systems.url = "github:nix-systems/default-linux";
     codex-desktop-linux.url = "github:ilysenko/codex-desktop-linux";
-    opencode.url = "github:anomalyco/opencode";
-
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -26,7 +24,6 @@
       nixpkgs,
       systems,
       codex-desktop-linux,
-      opencode,
       home-manager,
     }:
     let
@@ -46,19 +43,16 @@
         system:
         import ./packages {
           pkgs = pkgsFor system;
-          inherit codex-desktop-linux opencode;
+          inherit codex-desktop-linux;
         }
       );
 
       homeManagerModules = {
-        openCode = import ./modules/home-manager/open-code.nix { inherit self; };
         codexDesktop = import ./modules/home-manager/codex-desktop.nix {
           inherit self codex-desktop-linux;
         };
         codexComputerUseHyprland = import ./modules/home-manager/codex-computer-use-hyprland.nix;
-        kimiCode = import ./modules/home-manager/kimi-code.nix { inherit self; };
         codexOmx = import ./modules/home-manager/codex-omx.nix { inherit self; };
-        ccSwitch = import ./modules/home-manager/cc-switch.nix { inherit self; };
         default = nixslopHomeManagerModule;
         nixslop = nixslopHomeManagerModule;
       };

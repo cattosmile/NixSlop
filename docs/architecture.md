@@ -41,9 +41,8 @@ not physical keyboard layouts.
 
 The following are intentionally stable:
 
-- Ten package outputs: `codex`, `codex-computer-use-linux`, `codex-desktop`,
-  the three Codex Desktop feature variants, `kimi-code`, `opencode`,
-  `oh-my-codex`, and `cc-switch`.
+- Seven package outputs: `codex`, `codex-computer-use-linux`, `codex-desktop`,
+  the three Codex Desktop feature variants, and `oh-my-codex`.
 - Aggregate Home Manager modules `default` and `nixslop`.
 - Individual Home Manager module names and their historical option paths.
 - NixOS modules `default` and `codexComputerUse`.
@@ -63,11 +62,10 @@ Regression checks evaluate this boundary on every pull request and push to
 
 ## Configuration ownership
 
-The aggregate module composes four integrations without enabling them. Native
-Home Manager modules remain the canonical owners of OpenCode and Codex files:
+The aggregate module composes the Codex Desktop and OMX integrations without
+enabling them. Native Home Manager modules remain the canonical owners of
+Codex files:
 
-- `programs.opencode` owns OpenCode settings and context; NixSlop supplies the
-  package default and retains `programs.openCode` as a compatibility adapter.
 - `programs.codex` owns declarative Codex settings and context when
   `programs.codexOmx.setupPlugin = false`.
 - Mutable `omx setup --plugin` owns Codex configuration when
@@ -78,9 +76,6 @@ Home Manager modules remain the canonical owners of OpenCode and Codex files:
   skips unavailable runtime marketplaces, and never owns authentication,
   account slots, skills, or existing plugin entries. Native Home Manager Codex
   configuration is left to its declarative plugin options instead.
-- `programs.kimiCode.settings` owns non-secret Kimi configuration at
-  `~/.kimi-code/config.toml`.
-
 This single-owner rule prevents two activation paths from rewriting the same
 file with different models of state.
 

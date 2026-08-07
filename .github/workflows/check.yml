@@ -76,10 +76,7 @@ jobs:
           - codex-desktop-computer-use-ui
           - codex-desktop-remote-mobile-control
           - codex-desktop-computer-use-ui-remote-mobile-control
-          - kimi-code
-          - opencode
           - oh-my-codex
-          - cc-switch
     steps:
       - name: Checkout repository
         id: checkout
@@ -120,19 +117,8 @@ jobs:
             codex-desktop|codex-desktop-computer-use-ui|codex-desktop-remote-mobile-control|codex-desktop-computer-use-ui-remote-mobile-control)
               test -x "$package_path/bin/codex-desktop"
               ;;
-            kimi-code)
-              "$package_path/bin/kimi" --version
-              ;;
-            opencode)
-              "$package_path/bin/opencode" --version
-              ;;
             oh-my-codex)
               "$package_path/bin/omx" --version
-              ;;
-            cc-switch)
-              test -x "$package_path/bin/cc-switch"
-              "$package_path/bin/cc-switch-sandbox-probe"
-              nix develop -c scripts/smoke_cc_switch.sh "$package_path"
               ;;
             *)
               echo "::error::No smoke test is defined for $PACKAGE"

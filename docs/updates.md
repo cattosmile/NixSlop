@@ -19,11 +19,8 @@ GitHub Actions cron expressions use UTC.
 | --- | --- | --- |
 | `Update Codex` | `codex` | 00:17 daily |
 | `Update Codex Desktop` | `codex-desktop` | 02:47 daily |
-| `Update Kimi Code` | `kimi-code` | 05:17 daily |
-| `Update OpenCode` | `opencode` | 07:47 daily |
 | `Update oh-my-codex` | `oh-my-codex` | 10:17 daily |
 | `Update Foundations` | `foundations` | 12:47 daily |
-| `Update CC Switch` | `cc-switch` | 15:17 daily |
 | `Update Health` | sentinel | 23:47 daily |
 
 Every update caller also supports manual dispatch. Dispatch the named caller,
@@ -39,11 +36,8 @@ paths outside these allowlists:
 | --- | --- | --- | --- |
 | `codex` | Codex updater | `packages/codex/hashes.json` | `codex`, `oh-my-codex` |
 | `codex-desktop` | Update `codex-desktop-linux` input | `flake.lock` | Computer Use backend plus all four desktop outputs |
-| `kimi-code` | Kimi updater | `packages/kimi-code/hashes.json` | `kimi-code` |
-| `opencode` | Update `opencode` input | `flake.lock` | `opencode` |
 | `oh-my-codex` | OMX updater | OMX `hashes.json` and `Cargo.lock` | `oh-my-codex` |
-| `cc-switch` | Native source, Cargo, and pnpm hash updater | `packages/cc-switch/hashes.json` | `cc-switch` |
-| `foundations` | Update `nixpkgs`, `systems`, and `home-manager` inputs | `flake.lock` | all ten public package outputs |
+| `foundations` | Update `nixpkgs`, `systems`, and `home-manager` inputs | `flake.lock` | all seven public package outputs |
 
 For lock-file targets, the validator compares semantic input graphs rather than
 generated node names. Protected root-input closures must remain identical, the
@@ -59,18 +53,15 @@ Every non-empty update runs, in order:
 5. The real patch-source and packaged Computer Use desktop-plugin checks for
    desktop/foundation changes.
 6. Target package builds and executable smoke tests. Foundations builds all
-   ten outputs; Codex also builds OMX because the wrapper embeds Codex. CC
-   Switch additionally starts the real native GUI for 15 seconds under Xvfb
-   and D-Bus, so a source update that compiles but crashes at startup is not
-   merged.
+   seven outputs; Codex also builds OMX because the wrapper embeds Codex.
 
 The `queue: max` key is supported by GitHub Actions but is newer than the
 actionlint 1.7.12 concurrency schema. `.github/actionlint.yaml` suppresses only
-that exact stale-schema diagnostic and only for the seven fixed callers; every
+that exact stale-schema diagnostic and only for the four fixed callers; every
 other actionlint diagnostic remains enabled.
 
 The normal `Check` workflow independently evaluates contracts and runs an
-all-ten build matrix on pull requests and pushes to `main`.
+all-seven build matrix on pull requests and pushes to `main`.
 
 ## Pull request state machine
 

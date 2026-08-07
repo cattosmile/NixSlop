@@ -26,11 +26,6 @@ TARGETS: dict[str, TargetContract] = {
         frozenset({"flake.lock"}),
         frozenset({"codex-desktop-linux"}),
     ),
-    "kimi-code": TargetContract(frozenset({"packages/kimi-code/hashes.json"})),
-    "opencode": TargetContract(
-        frozenset({"flake.lock"}),
-        frozenset({"opencode"}),
-    ),
     "oh-my-codex": TargetContract(
         frozenset(
             {
@@ -39,7 +34,6 @@ TARGETS: dict[str, TargetContract] = {
             }
         )
     ),
-    "cc-switch": TargetContract(frozenset({"packages/cc-switch/hashes.json"})),
     "foundations": TargetContract(
         frozenset({"flake.lock"}),
         frozenset({"home-manager", "nixpkgs", "systems"}),

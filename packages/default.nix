@@ -1,18 +1,15 @@
 {
   pkgs,
   codex-desktop-linux,
-  opencode,
 }:
 
 let
-  system = pkgs.stdenv.hostPlatform.system;
   codex = pkgs.callPackage ./codex/package.nix { };
   codexDesktop = pkgs.callPackage ./codex-desktop/package.nix {
     codexDesktopLinux = codex-desktop-linux;
   };
 in
 {
-  cc-switch = pkgs.callPackage ./cc-switch/package.nix { };
   inherit codex;
 
   codex-computer-use-linux = codexDesktop.computerUseBinaries;
@@ -27,7 +24,5 @@ in
     enableComputerUseUi = true;
     linuxFeatureIds = [ "remote-mobile-control" ];
   };
-  kimi-code = pkgs.callPackage ./kimi-code/package.nix { };
-  opencode = opencode.packages.${system}.opencode;
   oh-my-codex = pkgs.callPackage ./oh-my-codex/package.nix { inherit codex; };
 }
