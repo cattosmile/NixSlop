@@ -12,6 +12,7 @@ let
   homeManagerContracts = import ../tests/home-manager-contracts.nix {
     inherit self pkgs home-manager;
   };
+  codex = self.packages.${system}.codex;
   codexDesktop = self.packages.${system}.codex-desktop;
 
   assertionCheck =
@@ -24,6 +25,13 @@ in
 {
   output-contracts = assertionCheck "output-contracts" outputContracts;
   module-contracts = assertionCheck "module-contracts" moduleContracts;
+
+  codex-code-mode-host = pkgs.runCommand "nixslop-codex-code-mode-host" { } ''
+    test -x ${codex}/bin/codex
+    test -x ${codex}/bin/codex-code-mode-host
+    test "$(${codex}/bin/codex --version)" = "codex-cli ${codex.version}"
+    touch "$out"
+  '';
 
   home-manager-contracts =
     assert homeManagerContracts.assertions;
