@@ -11,21 +11,22 @@ dispatch/start ordering. Even independent `flake.lock` updates therefore share
 one publication lane. The reusable workflow never accepts a command or path
 from a caller; its only input is the validated `program` enum.
 
-## Daily schedule
+## Manual operation
 
-GitHub Actions cron expressions use UTC.
+Cron triggers are intentionally disabled while the update lanes are being
+validated. Each caller remains available through `workflow_dispatch`:
 
 | Workflow name | Target | Schedule |
 | --- | --- | --- |
-| `Update Codex` | `codex` | 00:17 daily |
-| `Update Codex Desktop` | `codex-desktop` | 02:47 daily |
-| `Update oh-my-codex` | `oh-my-codex` | 10:17 daily |
-| `Update Foundations` | `foundations` | 12:47 daily |
-| `Update Health` | sentinel | 23:47 daily |
+| `Update Codex` | `codex` | manual dispatch |
+| `Update Codex Desktop` | `codex-desktop` | manual dispatch |
+| `Update oh-my-codex` | `oh-my-codex` | manual dispatch |
+| `Update Foundations` | `foundations` | manual dispatch |
+| `Update Health` | sentinel | manual dispatch |
 
-Every update caller also supports manual dispatch. Dispatch the named caller,
-not the reusable implementation workflow, to retain its permissions, explicit
-secret forwarding, and global mutex.
+Dispatch the named caller, not the reusable implementation workflow, to retain
+its permissions, explicit secret forwarding, and global mutex. Re-enable a
+caller schedule only after its manual lane is passing consistently.
 
 ## Fixed ownership and build map
 
@@ -127,17 +128,15 @@ PRs, use a narrowly scoped GitHub App or PAT rather than weakening validation.
 ## Stable health signal for Hermes
 
 `Update Health` has read-only `actions: read` and `contents: read` permissions.
-It queries the latest **scheduled** run of each of the seven exact workflow names;
-manual successes cannot mask a missed daily schedule. Every latest run must be
-`completed` with conclusion `success`, and its schedule-entry `created_at`
-timestamp must be no more than 36 hours old. The creation time is deliberate:
-manually re-running an old scheduled run changes its update time but cannot mask
-a missing daily schedule. The window tolerates ordinary GitHub schedule delays
-and the serialized update queue while detecting a missed day.
+While schedules are disabled, it queries the latest **manually dispatched** run
+of each exact update workflow. Every latest run must be `completed` with
+conclusion `success`, and its `created_at` timestamp must be no more than 36
+hours old. The window keeps the manual validation signal fresh while the lanes
+are being repaired.
 
 Hermes should monitor the workflow named `Update Health`. It must validate both
 the run conclusion and that the newest `Update Health` run itself was created
 no more than 36 hours ago. The sentinel validates the seven updater workflows,
-but a disabled or unscheduled sentinel cannot report its own absence. Do not
-configure Hermes against a repository-wide generic latest run: unrelated CI or
-manual dispatches would make that signal unstable.
+The sentinel cannot report its own absence. Do not configure Hermes against a
+repository-wide generic latest run: unrelated CI or manual dispatches would
+make that signal unstable.

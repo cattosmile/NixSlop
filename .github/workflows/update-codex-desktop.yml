@@ -1,8 +1,6 @@
 name: Update Codex Desktop
 
 on:
-  schedule:
-    - cron: '47 2 * * *'
   workflow_dispatch:
 
 permissions:

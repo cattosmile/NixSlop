@@ -176,12 +176,13 @@ sudo nixos-rebuild switch --flake .#hostname
 
 ## Repository automation and design
 
-Four fixed-target update workflows run daily on staggered UTC schedules. They
-serialize through one mutex, fully validate the selected update, and merge only
-through a target-specific `update/<target>` pull request. The stable
-`Update Health` workflow checks the latest scheduled result for every lane;
-Hermes should monitor that workflow name instead of a repository-wide “latest
-run”. See [docs/updates.md](docs/updates.md) for schedules and failure behavior.
+Four fixed-target update workflows are currently manual-only while the update
+lanes are being validated. They serialize through one mutex, fully validate the
+selected update, and merge only through a target-specific `update/<target>` pull
+request. The `Update Health` workflow checks the latest manually dispatched
+result for every lane; Hermes should monitor that workflow name instead of a
+repository-wide “latest run”. See [docs/updates.md](docs/updates.md) for the
+manual workflow and failure behavior.
 
 NixSlop remains a modular monorepo today so package dependencies, Home Manager
 defaults, compatibility checks, and lock updates can change atomically. The

@@ -1,10 +1,6 @@
 name: Update Health
 
 on:
-  schedule:
-    # Runs after all staggered update schedules. The 36-hour window tolerates
-    # normal GitHub schedule delays while still detecting a missed daily lane.
-    - cron: '47 23 * * *'
   workflow_dispatch:
 
 permissions:
@@ -21,7 +17,7 @@ defaults:
 
 jobs:
   update-health:
-    name: Verify scheduled update health
+    name: Verify manual update health
     runs-on: ubuntu-latest
     steps:
       - name: Verify named update workflows
@@ -61,7 +57,7 @@ jobs:
 
             if ! latest="$(
               gh api \
-                "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_file/runs?event=schedule&per_page=1" \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow_file/runs?event=workflow_dispatch&per_page=1" \
                 --jq '.workflow_runs[0] // empty'
             )" || [ -z "$latest" ]; then
               echo "::error::$expected_name has no workflow run"
@@ -79,14 +75,14 @@ jobs:
               echo "::error::$expected_name latest run is status=$status conclusion=$conclusion ($html_url)"
               failures=$((failures + 1))
             elif [ "$created_epoch" -lt "$oldest_allowed" ]; then
-              echo "::error::$expected_name latest scheduled run was created more than $max_age_hours hours ago ($created_at, $html_url)"
+              echo "::error::$expected_name latest manual run was created more than $max_age_hours hours ago ($created_at, $html_url)"
               failures=$((failures + 1))
             else
-              echo "$expected_name healthy: scheduled at $created_at and completed successfully"
+              echo "$expected_name healthy: manually dispatched at $created_at and completed successfully"
             fi
           done
 
           if [ "$failures" -ne 0 ]; then
-            echo "::error::$failures scheduled update workflow(s) are unhealthy"
+            echo "::error::$failures manually dispatched update workflow(s) are unhealthy"
             exit 1
           fi

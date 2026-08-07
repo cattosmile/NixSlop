@@ -1,8 +1,6 @@
 name: Update Foundations
 
 on:
-  schedule:
-    - cron: '47 12 * * *'
   workflow_dispatch:
 
 permissions:
