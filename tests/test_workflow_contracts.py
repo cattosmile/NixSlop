@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import sys
 import unittest
@@ -12,10 +11,6 @@ from unittest import mock
 ROOT = Path(__file__).parents[1]
 WORKFLOWS = ROOT / ".github" / "workflows"
 ACTIONLINT_CONFIG = ROOT / ".github" / "actionlint.yaml"
-CC_SWITCH_PACKAGE = ROOT / "packages" / "cc-switch" / "package.nix"
-CC_SWITCH_HASHES = ROOT / "packages" / "cc-switch" / "hashes.json"
-CC_SWITCH_UPDATER = ROOT / "packages" / "cc-switch" / "update.py"
-CC_SWITCH_SMOKE = ROOT / "scripts" / "smoke_cc_switch.sh"
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import validate_update  # noqa: E402
@@ -28,8 +23,6 @@ CALLERS = {
         "47 2 * * *",
         "codex-desktop",
     ),
-    "update-kimi-code.yml": ("Update Kimi Code", "17 5 * * *", "kimi-code"),
-    "update-opencode.yml": ("Update OpenCode", "47 7 * * *", "opencode"),
     "update-oh-my-codex.yml": (
         "Update oh-my-codex",
         "17 10 * * *",
@@ -40,7 +33,6 @@ CALLERS = {
         "47 12 * * *",
         "foundations",
     ),
-    "update-cc-switch.yml": ("Update CC Switch", "17 15 * * *", "cc-switch"),
 }
 
 ALL_PACKAGES = (
@@ -50,10 +42,7 @@ ALL_PACKAGES = (
     "codex-desktop-computer-use-ui",
     "codex-desktop-remote-mobile-control",
     "codex-desktop-computer-use-ui-remote-mobile-control",
-    "kimi-code",
-    "opencode",
     "oh-my-codex",
-    "cc-switch",
 )
 
 STEP_IDS = (
@@ -124,10 +113,7 @@ class CallerWorkflowTests(unittest.TestCase):
         job_names = {
             "update-codex.yml": "Run Codex update",
             "update-codex-desktop.yml": "Run Codex Desktop update",
-            "update-kimi-code.yml": "Run Kimi Code update",
-            "update-opencode.yml": "Run OpenCode update",
             "update-oh-my-codex.yml": "Run oh-my-codex update",
-            "update-cc-switch.yml": "Run CC Switch update",
             "update-foundations.yml": "Run foundation inputs update",
         }
         for filename, (name, cron, program) in CALLERS.items():
@@ -155,7 +141,7 @@ class CallerWorkflowTests(unittest.TestCase):
     def test_queue_schema_exception_is_exact_and_caller_scoped(self) -> None:
         config = ACTIONLINT_CONFIG.read_text()
         self.assertIn(
-            ".github/workflows/update-{cc-switch,codex,codex-desktop,kimi-code,opencode,oh-my-codex,foundations}.yml:",
+            ".github/workflows/update-{codex,codex-desktop,oh-my-codex,foundations}.yml:",
             config,
         )
         self.assertEqual(config.count("ignore:"), 1)
@@ -214,7 +200,7 @@ class ReusableWorkflowTests(unittest.TestCase):
         self.assertEqual(top_level_name(self.text), "Reusable Program Update")
         self.assertIn("  update:\n    name: Update ${{ inputs.program }}", self.text)
         self.assertIn(
-            "codex|codex-desktop|kimi-code|opencode|oh-my-codex|cc-switch|foundations)",
+            "codex|codex-desktop|oh-my-codex|foundations)",
             self.text,
         )
         actual_ids = re.findall(r"(?m)^        id: ([a-z0-9_]+)$", self.text)
@@ -231,10 +217,7 @@ class ReusableWorkflowTests(unittest.TestCase):
         commands = {
             "nix develop -c packages/codex/update.py",
             "nix flake update codex-desktop-linux",
-            "nix develop -c packages/kimi-code/update.py",
-            "nix flake update opencode",
             "nix develop -c packages/oh-my-codex/update.py",
-            "nix develop -c packages/cc-switch/update.py",
             "nix flake update nixpkgs systems home-manager",
         }
         for command in commands:
@@ -262,11 +245,6 @@ class ReusableWorkflowTests(unittest.TestCase):
                 frozenset({"flake.lock"}),
                 frozenset({"codex-desktop-linux"}),
             ),
-            "kimi-code": (
-                frozenset({"packages/kimi-code/hashes.json"}),
-                frozenset(),
-            ),
-            "opencode": (frozenset({"flake.lock"}), frozenset({"opencode"})),
             "oh-my-codex": (
                 frozenset(
                     {
@@ -274,10 +252,6 @@ class ReusableWorkflowTests(unittest.TestCase):
                         "packages/oh-my-codex/hashes.json",
                     }
                 ),
-                frozenset(),
-            ),
-            "cc-switch": (
-                frozenset({"packages/cc-switch/hashes.json"}),
                 frozenset(),
             ),
             "foundations": (
@@ -323,13 +297,6 @@ class ReusableWorkflowTests(unittest.TestCase):
         actual = tuple(re.findall(r"(?m)^                ([a-z0-9-]+)$", foundations.group(1)))
         self.assertEqual(actual, ALL_PACKAGES)
         self.assertIn("packages=(codex oh-my-codex)", self.text)
-        self.assertIn("packages=(cc-switch)", self.text)
-        self.assertIn('test -x "$package_path/bin/cc-switch"', self.text)
-        self.assertIn('"$package_path/bin/cc-switch-sandbox-probe"', self.text)
-        self.assertIn(
-            'nix develop -c scripts/smoke_cc_switch.sh "$package_path"',
-            self.text,
-        )
 
     def test_main_base_sha_is_persisted_and_rechecked_fail_closed(self) -> None:
         self.assertIn('base_file="$RUNNER_TEMP/nixslop-update-base-sha"', self.text)
@@ -550,58 +517,6 @@ class UpdateValidatorTests(unittest.TestCase):
             )
 
 
-class CcSwitchSourceBuildTests(unittest.TestCase):
-    def test_package_is_built_from_source_without_release_bundles(self) -> None:
-        text = CC_SWITCH_PACKAGE.read_text()
-        for required in (
-            "rustPlatform.buildRustPackage",
-            "fetchFromGitHub",
-            "fetchPnpmDeps",
-            "pnpm tauri build",
-            "--no-bundle",
-            "webkitgtk_4_1",
-            "lib.sourceTypes.fromSource",
-        ):
-            self.assertIn(required, text)
-        for forbidden in (
-            "AppImage",
-            "appimageTools",
-            "fetchurl",
-            "binaryNativeCode",
-        ):
-            self.assertNotIn(forbidden, text)
-
-    def test_hash_file_pins_all_source_build_inputs(self) -> None:
-        data = json.loads(CC_SWITCH_HASHES.read_text())
-        self.assertEqual(
-            tuple(data),
-            ("version", "sourceHash", "cargoHash", "pnpmHash"),
-        )
-        self.assertRegex(data["version"], r"^\d+\.\d+\.\d+$")
-        for name in ("sourceHash", "cargoHash", "pnpmHash"):
-            self.assertRegex(data[name], r"^sha256-[A-Za-z0-9+/=]+$")
-
-    def test_updater_refreshes_source_and_dependency_hashes(self) -> None:
-        text = CC_SWITCH_UPDATER.read_text()
-        self.assertIn("prefetch_source(latest)", text)
-        self.assertIn('"--unpack"', text)
-        self.assertIn(".#cc-switch.nativeApp.pnpmDeps", text)
-        self.assertIn(".#cc-switch.nativeApp.cargoDeps", text)
-        self.assertIn("file_transaction(HASHES_FILE)", text)
-        self.assertNotIn("AppImage", text)
-
-    def test_gui_smoke_starts_the_real_native_application(self) -> None:
-        text = CC_SWITCH_SMOKE.read_text()
-        for required in (
-            "xvfb-run",
-            "dbus-run-session",
-            '"$package_path/bin/cc-switch"',
-            "timeout --signal=TERM",
-            "status == 124",
-        ):
-            self.assertIn(required, text)
-
-
 class HealthWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -643,7 +558,7 @@ class CheckWorkflowTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.text = workflow_text("check.yml")
 
-    def test_matrix_builds_all_ten_public_outputs(self) -> None:
+    def test_matrix_builds_all_public_outputs(self) -> None:
         self.assertEqual(top_level_name(self.text), "Check")
         self.assertIn("  validate:\n    name: Validate repository contracts", self.text)
         self.assertIn(
@@ -667,12 +582,7 @@ class CheckWorkflowTests(unittest.TestCase):
             '"$package_path/bin/codex-computer-use-cosmic" --help',
             '"$package_path/bin/codex-chrome-extension-host" </dev/null',
             '"$package_path/bin/codex-desktop"',
-            '"$package_path/bin/kimi" --version',
-            '"$package_path/bin/opencode" --version',
             '"$package_path/bin/omx" --version',
-            'test -x "$package_path/bin/cc-switch"',
-            '"$package_path/bin/cc-switch-sandbox-probe"',
-            'nix develop -c scripts/smoke_cc_switch.sh "$package_path"',
         )
         for fragment in fragments:
             self.assertIn(fragment, self.text)

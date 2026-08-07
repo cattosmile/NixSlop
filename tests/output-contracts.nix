@@ -8,16 +8,13 @@ let
   packages = self.packages.${system};
   packageNames = builtins.attrNames packages;
   expectedPackageNames = [
-    "cc-switch"
     "codex"
     "codex-computer-use-linux"
     "codex-desktop"
     "codex-desktop-computer-use-ui"
     "codex-desktop-computer-use-ui-remote-mobile-control"
     "codex-desktop-remote-mobile-control"
-    "kimi-code"
     "oh-my-codex"
-    "opencode"
   ];
 
   computerUseUiOverride = packages.codex-desktop.override {
