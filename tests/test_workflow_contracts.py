@@ -17,22 +17,10 @@ import validate_update  # noqa: E402
 
 
 CALLERS = {
-    "update-codex.yml": ("Update Codex", "17 0 * * *", "codex"),
-    "update-codex-desktop.yml": (
-        "Update Codex Desktop",
-        "47 2 * * *",
-        "codex-desktop",
-    ),
-    "update-oh-my-codex.yml": (
-        "Update oh-my-codex",
-        "17 10 * * *",
-        "oh-my-codex",
-    ),
-    "update-foundations.yml": (
-        "Update Foundations",
-        "47 12 * * *",
-        "foundations",
-    ),
+    "update-codex.yml": ("Update Codex", "codex"),
+    "update-codex-desktop.yml": ("Update Codex Desktop", "codex-desktop"),
+    "update-oh-my-codex.yml": ("Update oh-my-codex", "oh-my-codex"),
+    "update-foundations.yml": ("Update Foundations", "foundations"),
 }
 
 ALL_PACKAGES = (
@@ -109,18 +97,20 @@ class CallerWorkflowTests(unittest.TestCase):
         self.assertEqual(actual, set(CALLERS))
         self.assertFalse((WORKFLOWS / "update-packages.yml").exists())
 
-    def test_names_crons_programs_permissions_and_mutex(self) -> None:
+    def test_names_manual_trigger_programs_permissions_and_mutex(self) -> None:
         job_names = {
             "update-codex.yml": "Run Codex update",
             "update-codex-desktop.yml": "Run Codex Desktop update",
             "update-oh-my-codex.yml": "Run oh-my-codex update",
             "update-foundations.yml": "Run foundation inputs update",
         }
-        for filename, (name, cron, program) in CALLERS.items():
+        for filename, (name, program) in CALLERS.items():
             with self.subTest(filename=filename):
                 text = workflow_text(filename)
                 self.assertEqual(top_level_name(text), name)
-                self.assertIn(f"- cron: '{cron}'", text)
+                self.assertIn("  workflow_dispatch:", text)
+                self.assertNotIn("schedule:", text)
+                self.assertNotIn("cron:", text)
                 self.assertRegex(text, rf"(?m)^      program: {re.escape(program)}$")
                 self.assertIn("uses: ./.github/workflows/update-reusable.yml", text)
                 self.assertRegex(text, r"(?m)^  update:$")
@@ -151,15 +141,12 @@ class CallerWorkflowTests(unittest.TestCase):
         )
         self.assertNotIn(".github/workflows/**/*.yml", config)
 
-    def test_schedules_are_unique_and_staggered_before_health(self) -> None:
-        crons = [contract[1] for contract in CALLERS.values()]
-        self.assertEqual(len(crons), len(set(crons)))
-        caller_minutes = []
-        for cron in crons:
-            minute, hour, *_ = cron.split()
-            caller_minutes.append(int(hour) * 60 + int(minute))
-        self.assertEqual(caller_minutes, sorted(caller_minutes))
-        self.assertLess(max(caller_minutes), 23 * 60 + 47)
+    def test_callers_are_manual_only(self) -> None:
+        for filename in CALLERS:
+            with self.subTest(filename=filename):
+                text = workflow_text(filename)
+                self.assertIn("on:\n  workflow_dispatch:", text)
+                self.assertNotIn("schedule:", text)
 
 
 class ReusableWorkflowTests(unittest.TestCase):
@@ -522,13 +509,14 @@ class HealthWorkflowTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.text = workflow_text("update-health.yml")
 
-    def test_health_name_permissions_schedule_and_window_are_stable(self) -> None:
+    def test_health_name_permissions_manual_trigger_and_window_are_stable(self) -> None:
         self.assertEqual(top_level_name(self.text), "Update Health")
         self.assertIn("actions: read", self.text)
         self.assertIn("contents: read", self.text)
-        self.assertIn("- cron: '47 23 * * *'", self.text)
+        self.assertIn("on:\n  workflow_dispatch:", self.text)
+        self.assertNotIn("schedule:", self.text)
         self.assertIn("max_age_hours=36", self.text)
-        self.assertIn("  update-health:\n    name: Verify scheduled update health", self.text)
+        self.assertIn("  update-health:\n    name: Verify manual update health", self.text)
         self.assertIn("- name: Verify named update workflows", self.text)
         self.assertIn("id: verify_update_health", self.text)
 
@@ -541,7 +529,7 @@ class HealthWorkflowTests(unittest.TestCase):
         )
         expected = {
             (name, filename)
-            for filename, (name, _cron, _program) in CALLERS.items()
+            for filename, (name, _program) in CALLERS.items()
         }
         self.assertEqual(mappings, expected)
         self.assertIn('status" != "completed"', self.text)
@@ -550,7 +538,7 @@ class HealthWorkflowTests(unittest.TestCase):
         self.assertIn("created_epoch", self.text)
         self.assertNotIn("updated_epoch", self.text)
         self.assertNotIn(".updated_at", self.text)
-        self.assertIn("runs?event=schedule&per_page=1", self.text)
+        self.assertIn("runs?event=workflow_dispatch&per_page=1", self.text)
 
 
 class CheckWorkflowTests(unittest.TestCase):

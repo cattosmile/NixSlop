@@ -1,8 +1,6 @@
 name: Update Codex
 
 on:
-  schedule:
-    - cron: '17 0 * * *'
   workflow_dispatch:
 
 permissions:
