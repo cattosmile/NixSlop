@@ -69,9 +69,21 @@ rustPlatform.buildRustPackage {
 
   sourceRoot = "source/codex-rs";
 
+  # Rusty V8 150.4.0 publishes no prebuilt sandbox artifact. Keep the source
+  # feature set aligned with the generic archive fetched above until a
+  # matching sandbox build is available. This changes V8's security boundary.
+  postPatch = ''
+    substituteInPlace code-mode-runtime/Cargo.toml \
+      --replace-fail \
+        'v8 = { workspace = true, features = ["v8_enable_sandbox"] }' \
+        'v8 = { workspace = true }'
+  '';
+
   cargoBuildFlags = [
     "--package"
     "codex-cli"
+    "--package"
+    "codex-code-mode-host"
   ];
 
   nativeBuildInputs = [
@@ -131,7 +143,12 @@ rustPlatform.buildRustPackage {
 
   doCheck = false;
 
-  postInstall = lib.optionalString installShellCompletions ''
+  postInstall = ''
+    install -Dm0755 \
+      "target/${stdenv.hostPlatform.rust.rustcTarget}/release/codex-code-mode-host" \
+      "$out/bin/codex-code-mode-host"
+  ''
+  + lib.optionalString installShellCompletions ''
     installShellCompletion --cmd codex \
       --bash <($out/bin/codex completion bash) \
       --fish <($out/bin/codex completion fish) \
