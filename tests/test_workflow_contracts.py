@@ -149,6 +149,68 @@ class CallerWorkflowTests(unittest.TestCase):
                 self.assertNotIn("schedule:", text)
 
 
+class DailyWorkflowTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.text = workflow_text("daily-updates.yml")
+
+    def test_daily_workflow_has_manual_and_daily_triggers(self) -> None:
+        self.assertEqual(top_level_name(self.text), "Daily Updates")
+        self.assertIn("  schedule:\n    - cron: \"17 2 * * *\"", self.text)
+        self.assertIn("  workflow_dispatch:", self.text)
+        self.assertIn("group: nixslop-update-global", self.text)
+        self.assertIn("cancel-in-progress: false", self.text)
+
+    def test_daily_workflow_serializes_fixed_lanes_from_codex(self) -> None:
+        expected_programs = {
+            "codex": "codex",
+            "codex-desktop": "codex-desktop",
+            "oh-my-codex": "oh-my-codex",
+            "foundations": "foundations",
+        }
+        for job, program in expected_programs.items():
+            with self.subTest(job=job):
+                job_block = re.search(
+                    rf"(?ms)^  {re.escape(job)}:\n(?P<body>.*?)(?=^  [a-z])",
+                    self.text + "\n  z-sentinel:\n",
+                )
+                self.assertIsNotNone(job_block)
+                assert job_block is not None
+                body = job_block.group("body")
+                self.assertIn("uses: ./.github/workflows/update-reusable.yml", body)
+                self.assertIn(f"program: {program}", body)
+                self.assertIn(
+                    "CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}",
+                    body,
+                )
+
+        self.assertRegex(self.text, r"(?ms)^  codex:\n.*?^  codex-desktop:\n")
+        self.assertRegex(
+            self.text,
+            r"(?ms)^  codex-desktop:\n.*?^    needs: codex\n",
+        )
+        self.assertRegex(
+            self.text,
+            r"(?ms)^  oh-my-codex:\n.*?^    needs: codex-desktop\n",
+        )
+        self.assertRegex(
+            self.text,
+            r"(?ms)^  foundations:\n.*?^    needs: oh-my-codex\n",
+        )
+
+    def test_daily_health_runs_after_failures_and_fails_closed(self) -> None:
+        health = re.search(r"(?ms)^  health:\n(?P<body>.*)$", self.text)
+        self.assertIsNotNone(health)
+        assert health is not None
+        body = health.group("body")
+        self.assertIn("if: ${{ always() }}", body)
+        for job in ("codex", "codex-desktop", "oh-my-codex", "foundations"):
+            self.assertIn(f"- {job}", body)
+            self.assertIn(f"needs.{job}.result", body)
+        self.assertIn("failed or were skipped", body)
+        self.assertIn("exit 1", body)
+
+
 class ReusableWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:

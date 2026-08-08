@@ -11,10 +11,10 @@ dispatch/start ordering. Even independent `flake.lock` updates therefore share
 one publication lane. The reusable workflow never accepts a command or path
 from a caller; its only input is the validated `program` enum.
 
-## Manual operation
+## Entry points and schedule
 
-Cron triggers are intentionally disabled while the update lanes are being
-validated. Each caller remains available through `workflow_dispatch`:
+The four target callers remain available through `workflow_dispatch`. The
+single daily orchestrator is both scheduled and manually dispatchable:
 
 | Workflow name | Target | Schedule |
 | --- | --- | --- |
@@ -22,11 +22,19 @@ validated. Each caller remains available through `workflow_dispatch`:
 | `Update Codex Desktop` | `codex-desktop` | manual dispatch |
 | `Update oh-my-codex` | `oh-my-codex` | manual dispatch |
 | `Update Foundations` | `foundations` | manual dispatch |
-| `Update Health` | sentinel | manual dispatch |
+| `Daily Updates` | all four targets, Codex-first | daily at `02:17 UTC` + manual dispatch |
+| `Update Health` | manual sentinel | manual dispatch |
 
-Dispatch the named caller, not the reusable implementation workflow, to retain
-its permissions, explicit secret forwarding, and global mutex. Re-enable a
-caller schedule only after its manual lane is passing consistently.
+Dispatch `Daily Updates` for a complete refresh. It calls the reusable
+implementation workflow in this fixed order: Codex, Codex Desktop,
+oh-my-codex, Foundations. Each later job has a `needs` dependency on the
+previous job, so a failed or skipped lane prevents all later lanes from
+starting. Dispatch a named caller only for a targeted manual update; never
+dispatch the reusable implementation workflow directly.
+
+The schedule uses GitHub's UTC cron and may be delayed by runner availability.
+The global `nixslop-update-global` mutex still protects against overlap with a
+manual target update.
 
 ## Fixed ownership and build map
 
@@ -127,16 +135,13 @@ PRs, use a narrowly scoped GitHub App or PAT rather than weakening validation.
 
 ## Stable health signal for Hermes
 
-`Update Health` has read-only `actions: read` and `contents: read` permissions.
-While schedules are disabled, it queries the latest **manually dispatched** run
-of each exact update workflow. Every latest run must be `completed` with
-conclusion `success`, and its `created_at` timestamp must be no more than 36
-hours old. The window keeps the manual validation signal fresh while the lanes
-are being repaired.
+The final `Report daily update health` job in `Daily Updates` is the primary
+Hermes signal. It runs with `always()`, records the result of every lane, and
+fails the daily workflow if any lane failed or was skipped. Hermes should poll
+the `Daily Updates` workflow by its exact workflow file/name from the local
+server, require `completed` + `success`, and de-duplicate notifications by run
+ID. A run older than 36 hours is stale.
 
-Hermes should monitor the workflow named `Update Health`. It must validate both
-the run conclusion and that the newest `Update Health` run itself was created
-no more than 36 hours ago. The sentinel validates the seven updater workflows,
-The sentinel cannot report its own absence. Do not configure Hermes against a
-repository-wide generic latest run: unrelated CI or manual dispatches would
-make that signal unstable.
+`Update Health` remains a read-only manual sentinel for targeted manual lanes.
+It has `actions: read` and `contents: read` permissions and should not be used
+as a repository-wide generic latest-run signal.

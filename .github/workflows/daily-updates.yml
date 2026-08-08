@@ -1,0 +1,95 @@
+name: Daily Updates
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: nixslop-update-global
+  cancel-in-progress: false
+
+jobs:
+  codex:
+    name: Daily Codex update
+    uses: ./.github/workflows/update-reusable.yml
+    with:
+      program: codex
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+  codex-desktop:
+    name: Daily Codex Desktop update
+    needs: codex
+    uses: ./.github/workflows/update-reusable.yml
+    with:
+      program: codex-desktop
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+  oh-my-codex:
+    name: Daily oh-my-codex update
+    needs: codex-desktop
+    uses: ./.github/workflows/update-reusable.yml
+    with:
+      program: oh-my-codex
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+  foundations:
+    name: Daily Foundations update
+    needs: oh-my-codex
+    uses: ./.github/workflows/update-reusable.yml
+    with:
+      program: foundations
+    secrets:
+      CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+  health:
+    name: Report daily update health
+    if: ${{ always() }}
+    needs:
+      - codex
+      - codex-desktop
+      - oh-my-codex
+      - foundations
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Verify the serialized update chain
+        id: verify_chain
+        env:
+          CODEX_RESULT: ${{ needs.codex.result }}
+          CODEX_DESKTOP_RESULT: ${{ needs.codex-desktop.result }}
+          OH_MY_CODEX_RESULT: ${{ needs.oh-my-codex.result }}
+          FOUNDATIONS_RESULT: ${{ needs.foundations.result }}
+        run: |
+          set -euo pipefail
+
+          failures=0
+          for result in \
+            "codex=$CODEX_RESULT" \
+            "codex-desktop=$CODEX_DESKTOP_RESULT" \
+            "oh-my-codex=$OH_MY_CODEX_RESULT" \
+            "foundations=$FOUNDATIONS_RESULT"; do
+            target="${result%%=*}"
+            state="${result#*=}"
+            echo "$target: $state"
+            if [ "$state" != "success" ]; then
+              failures=$((failures + 1))
+            fi
+          done
+
+          echo "Daily Updates run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ "$failures" -ne 0 ]; then
+            echo "::error::$failures update lane(s) failed or were skipped; Hermes should inspect this run"
+            exit 1
+          fi
+
+          echo "All daily update lanes completed successfully."
