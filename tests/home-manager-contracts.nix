@@ -236,6 +236,35 @@ let
       hyprlandBase
     ]).config;
 
+  centralFacade =
+    (mkHome [
+      self.homeManagerModules.default
+      {
+        programs.nixslop = {
+          codex.enable = true;
+          desktop = {
+            enable = true;
+            computerUseUi.enable = true;
+            remoteMobileControl.enable = true;
+          };
+          computerUse.enable = true;
+        };
+        wayland.windowManager.hyprland = {
+          enable = true;
+          configType = "lua";
+          settings.input.kb_layout = "de";
+        };
+      }
+    ]).config;
+
+  omxFacadeOnly =
+    (mkHome [
+      self.homeManagerModules.default
+      {
+        programs.nixslop.omx.enable = true;
+      }
+    ]).config;
+
   hyprlandOptOut =
     (mkHome [
       self.homeManagerModules.codexDesktop
@@ -416,9 +445,20 @@ let
     assert lib.hasAttrByPath [ "programs" "codexDesktopLinux" "enable" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "codexComputerUse" "enable" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "codexComputerUseHyprland" "enable" ] aggregateEval.options;
+    assert lib.hasAttrByPath [ "programs" "nixslop" "codex" "enable" ] aggregateEval.options;
+    assert lib.hasAttrByPath [ "programs" "nixslop" "omx" "enable" ] aggregateEval.options;
+    assert lib.hasAttrByPath [ "programs" "nixslop" "desktop" "enable" ] aggregateEval.options;
+    assert lib.hasAttrByPath [ "programs" "nixslop" "computerUse" "enable" ] aggregateEval.options;
     # `homeManagerModules.nixslop` is a public behavioral alias for the
     # aggregate. Compare evaluated values, never the module functions.
     assert aggregateProjection aggregateAlias == aggregateProjection aggregate;
+    assert centralFacade.programs.codexOmx.enable;
+    assert centralFacade.programs.codexDesktopLinux.enable;
+    assert centralFacade.programs.codexDesktopLinux.computerUseUi.enable;
+    assert centralFacade.programs.codexDesktopLinux.remoteMobileControl.enable;
+    assert centralFacade.programs.codexComputerUse.enable;
+    assert centralFacade.programs.codexComputerUseHyprland.enable;
+    assert omxFacadeOnly.programs.codexOmx.enable;
     assert
       aggregate.programs.codexDesktopLinux.package.outPath
       == self.packages.${system}.codex-desktop.outPath;

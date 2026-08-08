@@ -63,8 +63,11 @@ Regression checks evaluate this boundary on every pull request and push to
 
 ## Configuration ownership
 
-The aggregate module composes the Codex Desktop and OMX integrations without
-enabling them. Native Home Manager modules remain the canonical owners of
+The aggregate module exposes the central `programs.nixslop` convenience facade
+and composes the Codex Desktop, Computer Use, and OMX integrations without
+owning their implementation. Its options project weak defaults onto the
+historical module paths, so explicit legacy settings still win. Native Home
+Manager modules remain the canonical owners of
 Codex files:
 
 - `programs.codex` owns declarative Codex settings and context when
@@ -82,6 +85,11 @@ Codex files:
   `ydotoold` service, and `YDOTOOL_SOCKET`. When the legacy NixOS module is
   present, it reuses that module's system socket instead of starting a second
   daemon.
+- `programs.nixslop` is the consumer-facing setup facade. Its `codex` and
+  `omx` selectors intentionally target the current combined Codex/OMX module;
+  `desktop` and `computerUse` select their corresponding integrations. The
+  historical option paths remain public for advanced configuration and
+  compatibility.
 - `nixosModules.codexComputerUse` remains a compatibility boundary for systems
   that need a system-level `ydotoold` service or NixOS-wide device/group
   integration. It is not required for the normal Home Manager setup.

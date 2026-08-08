@@ -22,14 +22,15 @@ Then add this module to the user's Home Manager configuration:
 {
   imports = [ inputs.nixslop.homeManagerModules.default ];
 
-  programs.codexDesktopLinux = {
-    enable = true;
-    computerUseUi.enable = true;
-    remoteMobileControl.enable = true;
+  programs.nixslop = {
+    codex.enable = true;
+    desktop = {
+      enable = true;
+      computerUseUi.enable = true;
+      remoteMobileControl.enable = true;
+    };
+    computerUse.enable = true;
   };
-
-  programs.codexComputerUse.enable = true;
-  programs.codexOmx.enable = true;
 }
 ```
 
@@ -37,8 +38,16 @@ This installs Codex Desktop, the Computer Use UI, the Linux Computer Use
 runtime, Remote Mobile Control, Codex CLI, oh-my-codex, and tmux. The Computer
 Use runtime is managed by Home Manager: it installs AT-SPI2 and ydotool,
 registers the AT-SPI D-Bus services, and starts a per-user `ydotoold` service
-with a private socket. Do not enable Home Manager's native `programs.codex`
-module together with this setup.
+with a private socket. `programs.nixslop.omx.enable = true` is an equivalent
+selector for the current combined Codex/oh-my-codex integration; normally use
+one of `codex.enable` or `omx.enable`. Do not enable Home Manager's native
+`programs.codex` module together with this setup.
+
+The central `programs.nixslop` options are a convenience facade over the
+historical module paths. Existing configurations using
+`programs.codexDesktopLinux`, `programs.codexComputerUse`,
+`programs.codexOmx`, or `programs.codexComputerUseHyprland` remain supported,
+including their advanced package and daemon options.
 
 ## NixOS integration
 
