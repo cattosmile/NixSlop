@@ -29,6 +29,31 @@ let
       modules = [ baseModule ] ++ extraModules;
     };
 
+  codexComputerUseEval = mkHome [
+    self.homeManagerModules.codexComputerUse
+    {
+      programs.codexComputerUse.enable = true;
+    }
+  ];
+  codexComputerUse = codexComputerUseEval.config;
+
+  legacyCodexComputerUse =
+    (home-manager.lib.homeManagerConfiguration {
+      inherit pkgs;
+      extraSpecialArgs = {
+        osConfig = {
+          services.codexComputerUse.enable = true;
+        };
+      };
+      modules = [
+        baseModule
+        self.homeManagerModules.codexComputerUse
+        {
+          programs.codexComputerUse.enable = true;
+        }
+      ];
+    }).config;
+
   packagePaths = packages: map (package: package.outPath) packages;
   packageCount = package: packages: lib.count (path: path == package.outPath) (packagePaths packages);
 
@@ -268,6 +293,8 @@ let
     }
   ];
 
+  ydotooldExecStart = lib.concatStringsSep " " codexComputerUse.systemd.user.services.ydotoold.Service.ExecStart;
+
   aggregateProjection = config: {
     codexDesktopEnabled = config.programs.codexDesktopLinux.enable;
     physicalLayout = config.wayland.windowManager.hyprland.settings.input.kb_layout;
@@ -364,8 +391,30 @@ let
       codexOmxExplicitPackage.programs.codexOmx.ohMyCodexPackage.outPath == explicitOmxPackage.outPath;
     assert packageCount explicitOmxPackage codexOmxExplicitPackage.home.packages == 1;
     assert !invalidMutableAndDeclarative.success;
+    assert codexComputerUse.programs.codexComputerUse.enable;
+    assert packageCount pkgs.at-spi2-core codexComputerUse.home.packages == 1;
+    assert packageCount pkgs.ydotool codexComputerUse.home.packages == 1;
+    assert packageCount pkgs.at-spi2-core codexComputerUse.dbus.packages == 1;
+    assert packageCount pkgs.at-spi2-core codexComputerUse.systemd.user.packages == 1;
+    assert codexComputerUse.programs.codexComputerUse.ydotoold.enable;
+    assert
+      codexComputerUse.programs.codexComputerUse.ydotoold.socket
+      == "/home/module-test/.local/state/codex-computer-use/ydotool.sock";
+    assert
+      codexComputerUse.home.sessionVariables.YDOTOOL_SOCKET
+      == codexComputerUse.programs.codexComputerUse.ydotoold.socket;
+    assert
+      codexComputerUse.systemd.user.sessionVariables.YDOTOOL_SOCKET
+      == codexComputerUse.programs.codexComputerUse.ydotoold.socket;
+    assert lib.hasInfix "ydotoold" ydotooldExecStart;
+    assert lib.hasInfix "--socket-perm=0600" ydotooldExecStart;
+    assert lib.hasInfix "unset NO_AT_BRIDGE" codexComputerUse.home.sessionVariablesExtra;
+    assert !legacyCodexComputerUse.programs.codexComputerUse.ydotoold.enable;
+    assert legacyCodexComputerUse.programs.codexComputerUse.ydotoold.socket == "/run/ydotoold/socket";
+    assert !(builtins.hasAttr "ydotoold" legacyCodexComputerUse.systemd.user.services);
     assert lib.hasAttrByPath [ "programs" "codexOmx" "setupPlugin" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "codexDesktopLinux" "enable" ] aggregateEval.options;
+    assert lib.hasAttrByPath [ "programs" "codexComputerUse" "enable" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "codexComputerUseHyprland" "enable" ] aggregateEval.options;
     # `homeManagerModules.nixslop` is a public behavioral alias for the
     # aggregate. Compare evaluated values, never the module functions.

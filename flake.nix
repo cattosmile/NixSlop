@@ -51,6 +51,7 @@
         codexDesktop = import ./modules/home-manager/codex-desktop.nix {
           inherit self codex-desktop-linux;
         };
+        codexComputerUse = import ./modules/home-manager/codex-computer-use.nix;
         codexComputerUseHyprland = import ./modules/home-manager/codex-computer-use-hyprland.nix;
         codexOmx = import ./modules/home-manager/codex-omx.nix { inherit self; };
         default = nixslopHomeManagerModule;

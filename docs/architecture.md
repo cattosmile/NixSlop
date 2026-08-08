@@ -25,17 +25,18 @@ each have their own ownership boundary.
 | --- | --- | --- |
 | Flake assembly | `flake.nix`, `flake.lock` | Inputs and stable public output names |
 | Packages | `packages/` | Package derivations, source pins, desktop variants, updater scripts |
-| Home Manager | `modules/home-manager/` | Aggregate and individual program integrations |
-| NixOS | `modules/nixos/` | Computer Use system services only |
+| Home Manager | `modules/home-manager/` | Aggregate, program integrations, and user-session services |
+| NixOS | `modules/nixos/` | Optional Computer Use system-service fallback |
 | Checks | `nix/checks.nix`, `tests/` | Output, module, generated-file, updater, and workflow contracts |
 | Development shell | `nix/dev-shells.nix` | Repository maintenance tools |
 | Automation | `.github/workflows/`, `scripts/validate_update.py` | Fixed-target updates, PR lifecycle, health sentinel |
 
 Package modules may select NixSlop package outputs as defaults, but consumer
-configuration and secrets stay outside this repository. The NixOS module owns
-system services; the Home Manager modules own user packages and generated
-files. Codex Desktop's Hyprland adapter changes only the virtual ydotool device,
-not physical keyboard layouts.
+configuration and secrets stay outside this repository. The Home Manager
+modules own user packages, generated files, and user-session services. The
+NixOS module is retained for systems that need a system-level ydotool daemon or
+device/group integration. Codex Desktop's Hyprland adapter changes only the
+virtual ydotool device, not physical keyboard layouts.
 
 ## Public compatibility boundary
 
@@ -76,6 +77,14 @@ Codex files:
   skips unavailable runtime marketplaces, and never owns authentication,
   account slots, skills, or existing plugin entries. Native Home Manager Codex
   configuration is left to its declarative plugin options instead.
+- `programs.codexComputerUse` owns the user-space Computer Use runtime: the
+  AT-SPI D-Bus and systemd user units, the ydotool client, the per-user
+  `ydotoold` service, and `YDOTOOL_SOCKET`. When the legacy NixOS module is
+  present, it reuses that module's system socket instead of starting a second
+  daemon.
+- `nixosModules.codexComputerUse` remains a compatibility boundary for systems
+  that need a system-level `ydotoold` service or NixOS-wide device/group
+  integration. It is not required for the normal Home Manager setup.
 This single-owner rule prevents two activation paths from rewriting the same
 file with different models of state.
 
