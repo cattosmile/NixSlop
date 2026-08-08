@@ -28,7 +28,7 @@ Then add this module to the user's Home Manager configuration:
     remoteMobileControl.enable = true;
   };
 
-  programs.codexOmx.enable = true; # default: false
+  programs.codexOmx.enable = true;
 }
 ```
 
