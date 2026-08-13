@@ -37,10 +37,11 @@ modules own user packages, generated files, and user-session services. The
 NixOS module is retained only as a legacy fallback for systems that need a
 system-level ydotool daemon or device/group integration. The official ChatGPT
 Desktop package is also exposed as an opt-in NixSlop Computer Use variant. That
-variant stages the community Linux plugin and its feature patches into the
-official app, while replacing the native helper with NixSlop's Hyprland-first
-and grim-enabled backend. The Hyprland adapter changes only the virtual
-ydotool device, not physical keyboard layouts.
+variant keeps OpenAI's official executable, Electron runtime, native modules,
+and FHS layout intact, then stages the community Linux plugin and its feature
+patches into the official app while replacing only the native helper with
+NixSlop's Hyprland-first and grim-enabled backend. The Hyprland adapter changes
+only the virtual ydotool device, not physical keyboard layouts.
 
 ## Public compatibility boundary
 

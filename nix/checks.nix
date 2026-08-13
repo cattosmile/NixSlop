@@ -60,11 +60,14 @@ in
         nativeBuildInputs = [ pkgs.jq ];
       }
       ''
-        plugin=${chatgptDesktopComputerUse}/opt/codex-desktop/resources/plugins/openai-bundled/plugins/computer-use
-        marketplace=${chatgptDesktopComputerUse}/opt/codex-desktop/resources/plugins/openai-bundled/.agents/plugins/marketplace.json
-        patchReport=${chatgptDesktopComputerUse}/opt/codex-desktop/.codex-linux/patch-report.json
+        appRoot=${chatgptDesktopComputerUse}/usr/lib/chatgpt
+        plugin=$appRoot/resources/plugins/openai-bundled/plugins/computer-use
+        marketplace=$appRoot/resources/plugins/openai-bundled/.agents/plugins/marketplace.json
+        patchReport=${chatgptDesktopComputerUse.patchedComputerUsePackage}/opt/codex-desktop/.codex-linux/patch-report.json
         test -x ${chatgptDesktopComputerUse}/bin/chatgpt
         test -x ${chatgptDesktopComputerUse}/bin/codex-desktop
+        test -x "$appRoot/ChatGPT"
+        test -f "$appRoot/resources/app.asar"
         test -x "$plugin/bin/codex-computer-use-linux"
         test -x "$plugin/bin/codex-computer-use-cosmic"
         test -x "$plugin/bin/codex-chrome-extension-host"

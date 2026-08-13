@@ -44,7 +44,6 @@
   rustPlatform,
   stdenvNoCC,
   systemd,
-  symlinkJoin,
   wayland,
   xdg-utils,
   xz,
@@ -246,7 +245,7 @@ let
     };
   };
 
-  upstreamComputerUsePackage =
+  patchedComputerUsePackage =
     (codex-desktop-linux.packages.${system}.codex-desktop-computer-use-ui).overrideAttrs
       (old: {
         postInstall = (old.postInstall or "") + ''
@@ -259,29 +258,67 @@ let
         '';
       });
 
-  computerUsePackage = symlinkJoin {
-    name = "chatgpt-desktop-${source.version}-computer-use";
-    paths = [ upstreamComputerUsePackage ];
-    nativeBuildInputs = [ makeWrapper ];
+  computerUseContents = stdenvNoCC.mkDerivation {
+    pname = "chatgpt-desktop-contents-computer-use";
+    inherit (source) version;
+    dontUnpack = true;
+    dontFixup = true;
 
-    postBuild = ''
-      makeWrapper ${upstreamComputerUsePackage}/bin/codex-desktop "$out/bin/chatgpt"
+    installPhase = ''
+      mkdir -p "$out"
+      cp -a ${contents}/. "$out/"
+      chmod -R u+w "$out/usr/lib/chatgpt/resources"
 
-      if [ -f "$out/share/applications/codex-desktop.desktop" ]; then
-        cp -L "$out/share/applications/codex-desktop.desktop" "$out/share/applications/chatgpt.desktop"
-        substituteInPlace "$out/share/applications/chatgpt.desktop" \
-          --replace-fail "${upstreamComputerUsePackage}/bin/codex-desktop" "$out/bin/chatgpt" \
-          --replace-fail "Name=ChatGPT Community" "Name=ChatGPT" \
-          --replace-fail " %u" " %U"
+      # Keep OpenAI's official executable, native modules, FHS layout, and
+      # Electron runtime. Only the app bundle and plugin assets come from the
+      # community feature-patch build.
+      install -Dm0644 \
+        ${patchedComputerUsePackage}/opt/codex-desktop/resources/app.asar \
+        "$out/usr/lib/chatgpt/resources/app.asar"
+
+      plugin_root="$out/usr/lib/chatgpt/resources/plugins/openai-bundled/plugins"
+      mkdir -p "$plugin_root"
+      cp -a \
+        ${patchedComputerUsePackage}/opt/codex-desktop/resources/plugins/openai-bundled/plugins/computer-use \
+        "$plugin_root/"
+
+      install -Dm0644 \
+        ${patchedComputerUsePackage}/opt/codex-desktop/resources/plugins/openai-bundled/.agents/plugins/marketplace.json \
+        "$out/usr/lib/chatgpt/resources/plugins/openai-bundled/.agents/plugins/marketplace.json"
+    '';
+  };
+
+  computerUsePackage = officialPackage.overrideAttrs (old: {
+    pname = "chatgpt-desktop-computer-use";
+
+    extraBuildCommands = ''
+      install -d "$out/usr/lib64"
+      cp -a ${computerUseContents}/usr/lib/chatgpt "$out/usr/lib64/"
+    '';
+
+    extraInstallCommands = ''
+      install -d "$out/usr/lib" "$out/share/applications"
+      cp -a ${computerUseContents}/usr/lib/chatgpt "$out/usr/lib/"
+
+      if [ -d ${computerUseContents}/usr/share/icons ]; then
+        cp -a ${computerUseContents}/usr/share/icons "$out/share/"
       fi
+
+      install -Dm0644 \
+        ${computerUseContents}/usr/share/applications/chatgpt.desktop \
+        "$out/share/applications/chatgpt.desktop"
+      substituteInPlace "$out/share/applications/chatgpt.desktop" \
+        --replace-fail 'Exec=chatgpt %U' "Exec=$out/bin/chatgpt %U"
+
+      ln -s chatgpt "$out/bin/codex-desktop"
     '';
 
     passthru = {
-      inherit computerUseBinaries upstreamComputerUsePackage;
+      inherit computerUseBinaries computerUseContents patchedComputerUsePackage;
       inherit enableComputerUseUi linuxFeatureIds linuxFeaturesConfigOverride;
     };
 
     meta = officialPackage.meta or { };
-  };
+  });
 in
 if enableComputerUseUi then computerUsePackage else officialPackage
