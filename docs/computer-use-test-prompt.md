@@ -29,6 +29,10 @@ Rufe zuerst `get_app_state` und `doctor` auf. Prüfe im `doctor`-Ergebnis:
   `coordinates.capture_scale` sind vorhanden; die Capture-Skalierung ist auf
   meinem Hyprland-Setup 1.0;
 - die bevorzugten Backends sind Grim für Screenshots und Hyprland für Fenster.
+- `readiness.optional_backends` darf Hinweise auf fehlende GNOME-Schemas oder
+  das RemoteDesktop-Portal enthalten. Diese sind unter Hyprland erwartete
+  Alternativen und kein Fehler, solange `readiness.blockers` leer ist und die
+  bevorzugten nativen Backends bereit sind.
 
 2. Teste alle 18 Funktionen einzeln
 
@@ -39,7 +43,10 @@ Rufe zuerst `get_app_state` und `doctor` auf. Prüfe im `doctor`-Ergebnis:
 
 Für `screenshot` prüfe die Bild-Metadaten und die logischen
 `coordinate_width`/`coordinate_height`. Für `click` und `drag` verwende ein
-eigens geöffnetes Testfenster mit klaren Zielen. Für `set_value` verwende ein
+eigens geöffnetes Testfenster mit klaren Zielen. Für einen semantischen Klick
+verwende einen sichtbaren Button, Checkbox- oder Toggle-Zustand und verifiziere
+die Zustandsänderung; ein Tab kann trotz korrektem Pointer-Klick seine Auswahl
+wegen eigener App-Logik unverändert lassen. Für `set_value` verwende ein
 wirklich editierbares Textfeld. Für `press_key` und `type_text` verwende ein
 temporäres Terminal oder Textfeld und verifiziere den tatsächlichen Inhalt,
 einschließlich Unterstrich, Bindestrich, Zahlen und Großbuchstaben, zum
@@ -47,14 +54,22 @@ Beispiel `CUA_TEXT_OK_-_0123`.
 
 3. Stale-window-Recovery
 
-Wähle ein unkritisches Testfenster und rufe `list_windows` auf. Führe eine
-reversible `move_window`- oder `resize_window`-Aktion mit der aktuellen
-Fenster-ID aus. Schließe und öffne nur dieses Testfenster neu, sodass die alte
-ID veraltet ist. Verwende danach die alte ID für eine zweite reversible
-Geometrieaktion und prüfe, dass das Ergebnis eine eindeutige Recovery meldet
-und die neue Fenster-ID/Geometrie korrekt verwendet. Falls die alte ID nicht
-mehr als Ziel übergeben werden kann, markiere nur diesen Teil als nicht
-geprüft; teste trotzdem, dass eine frische `list_windows`-Abfrage funktioniert.
+Wähle ein unkritisches, schwebendes Testfenster und rufe `list_windows` auf.
+Führe eine reversible `move_window`- oder `resize_window`-Aktion mit der
+aktuellen Fenster-ID aus und merke dir zusätzlich exakt `pid`, `app_id`,
+`wm_class` und `title`. Schließe und öffne nur dieses Testfenster neu, sodass
+die alte ID veraltet ist. Verwende danach die alte ID **zusammen mit diesen
+Identitätsfeldern** für eine zweite reversible Geometrieaktion. Prüfe, dass die
+Antwort eine eindeutige Recovery meldet und die neue Fenster-ID/Geometrie
+korrekt verwendet. Eine Recovery nur anhand einer nackten alten ID muss aus
+Sicherheitsgründen abgelehnt werden. Teste außerdem zwei gleich identifizierte
+Fenster und verifiziere, dass kein falsches Fenster verändert wird.
+
+Teste `move_window`/`resize_window` für exakte Pixelwerte mit einem floating
+Fenster. Ein tiled Fenster oder ein gedrehtes/zu kleines Monitor-Layout darf
+die gewünschte Geometrie durch Hyprland begrenzen; markiere das als
+`⚠️ compositor constraint` und vergleiche die zurückgegebene finale Geometrie,
+nicht als Plugin-Fehler.
 
 4. Präzision und mehrere Monitore
 

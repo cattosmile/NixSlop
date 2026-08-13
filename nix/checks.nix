@@ -110,7 +110,9 @@ in
         grep -Fq 'HYPRLAND_BACKEND => hyprland::move_window' "$source/computer-use-linux/src/windowing/registry.rs"
         grep -Fq 'capture_with_grim' "$source/computer-use-linux/src/screenshot.rs"
         grep -Fq 'pub coordinates: CoordinateReport' "$source/computer-use-linux/src/diagnostics.rs"
+        grep -Fq 'pub optional_backends: Vec<String>' "$source/computer-use-linux/src/diagnostics.rs"
         grep -Fq 'dispatch_window_pixel_with_recovery' "$source/computer-use-linux/src/windowing/backends/hyprland.rs"
+        grep -Fq 'recover_stale_window_target' "$source/computer-use-linux/src/server.rs"
         grep -Fq 'only_prefers_grim_for_wayland_sessions' "$source/computer-use-linux/src/screenshot.rs"
         touch "$out"
       '';

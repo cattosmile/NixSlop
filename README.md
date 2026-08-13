@@ -58,10 +58,24 @@ reports whether `hyprctl monitors -j` and Grim are ready, the logical desktop
 origin, monitor count, and capture scale. Geometry operations reread monitor
 metadata for every request, so monitor changes and output reconfiguration do
 not leave a stale conversion factor behind. If a window ID becomes stale, a
-move or resize retries once only when the replacement can be identified
-uniquely by PID/window identity; ambiguous matches fail safely instead of
-moving the wrong window. Grim is preferred for Wayland sessions, while native
-X11 sessions keep their existing screenshot fallback.
+move or resize first refreshes the current Hyprland list and retries only when
+the replacement can be identified uniquely by the supplied PID, app ID/window
+class, and title. This recovery happens at the tool-target resolution boundary,
+so it also works when the stale ID disappears before the backend receives the
+request. The response identifies the old and new IDs. An ID without identity
+data cannot be recovered safely, and ambiguous matches fail closed. Grim is
+preferred for Wayland sessions, while native X11 sessions keep their existing
+screenshot fallback.
+
+`doctor.readiness.blockers` contains only requirements for the active path.
+Hyprland installations may still report missing GNOME toolkit schemas or the
+RemoteDesktop keyboard portal; those alternatives are listed under
+`doctor.readiness.optional_backends` and are informational when AT-SPI,
+Hyprland, ydotoold, and Grim are ready. Hyprland's tiling layout can also
+constrain a requested move or size. Geometry responses always return the final
+compositor geometry, so a test should use a floating disposable window when it
+needs exact pixel movement and treat tiled/monitor-bound clamping as an
+explicit compositor constraint.
 
 `programs.nixslop.omx.enable = true` is an equivalent selector for the current
 combined Codex/oh-my-codex integration; normally use one of `codex.enable` or

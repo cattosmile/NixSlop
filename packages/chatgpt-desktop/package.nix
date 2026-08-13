@@ -233,7 +233,9 @@ let
         grep -Fq '.args(["-s", "1", "-t", "png", filename])' "$screenshot"
         grep -Fq 'Self::Grim' "$screenshot"
         grep -Fq 'pub coordinates: CoordinateReport' "$out/computer-use-linux/src/diagnostics.rs"
+        grep -Fq 'pub optional_backends: Vec<String>' "$out/computer-use-linux/src/diagnostics.rs"
         grep -Fq 'dispatch_window_pixel_with_recovery' "$hyprland"
+        grep -Fq 'recover_stale_window_target' "$out/computer-use-linux/src/server.rs"
         grep -Fq 'only_prefers_grim_for_wayland_sessions' "$screenshot"
         test "$(sed -n '/const BACKEND_ORDER/,/];/p' "$registry" | grep -n 'BackendKind::' | head -n 1 | cut -d: -f2-)" = \
           '    BackendKind::Hyprland,'
