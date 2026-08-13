@@ -41,7 +41,11 @@ variant keeps OpenAI's official executable, Electron runtime, native modules,
 and FHS layout intact, then stages the community Linux plugin and its feature
 patches into the official app while replacing only the native helper with
 NixSlop's Hyprland-first and grim-enabled backend. The Hyprland adapter changes
-only the virtual ydotool device, not physical keyboard layouts.
+only the virtual ydotool device, not physical keyboard layouts. When the UI
+variant is enabled, the Home Manager activation also registers the local
+`computer-use@openai-bundled` plugin in Codex's mutable plugin configuration;
+the immutable package alone only makes that plugin available in the bundled
+marketplace.
 
 ## Public compatibility boundary
 

@@ -39,8 +39,10 @@ as a compatibility alias. Enabling `desktop.computerUseUi` selects a variant of
 the official app with the community Linux Computer Use plugin, Linux UI
 feature patches, and NixSlop's Hyprland backend. The official executable and
 Electron runtime remain the base; NixSlop only adds the plugin bundle and its
-native helper. `computerUse.enable` provides the optional ydotool/AT-SPI
-fallback runtime used by that plugin.
+native helper. Home Manager also registers the bundled
+`computer-use@openai-bundled` plugin when the UI variant is enabled.
+`computerUse.enable` provides the optional ydotool/AT-SPI fallback runtime used
+by that plugin.
 
 `programs.nixslop.omx.enable = true` is an equivalent selector for the current
 combined Codex/oh-my-codex integration; normally use one of `codex.enable` or

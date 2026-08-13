@@ -58,6 +58,21 @@ let
     "codex"
     "plugins"
   ] options;
+  hasDesktopComputerUseOption = lib.hasAttrByPath [
+    "programs"
+    "codexDesktopLinux"
+    "computerUseUi"
+    "enable"
+  ] options;
+  desktopComputerUseEnabled =
+    hasDesktopComputerUseOption
+    && lib.attrByPath [
+      "programs"
+      "codexDesktopLinux"
+      "computerUseUi"
+      "enable"
+    ] false config;
+  computerUsePlugins = lib.optional desktopComputerUseEnabled "computer-use@openai-bundled";
 in
 {
   options.programs.codexOmx = {
@@ -201,7 +216,11 @@ in
                   fi
                 fi
 
-                for plugin in ${lib.concatMapStringsSep " " lib.escapeShellArg cfg.defaultPlugins}; do
+                for plugin in ${
+                  lib.concatMapStringsSep " " lib.escapeShellArg (
+                    lib.unique (cfg.defaultPlugins ++ computerUsePlugins)
+                  )
+                }; do
                   # Never change a user's explicit enablement or source choice. The
                   # Codex CLI is called only for plugin IDs absent from config.toml.
                   if [ -f "$codex_config" ] && grep -Fq "[plugins.\"$plugin\"]" "$codex_config"; then
