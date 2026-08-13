@@ -472,6 +472,12 @@ let
     assert !centralFacade.programs.codexComputerUseHyprland.enable;
     assert lib.hasInfix "computer-use@openai-bundled"
       centralFacade.home.activation.restoreCodexDefaultPlugins.data;
+    assert lib.hasInfix "plugins/cache/openai-bundled/computer-use"
+      centralFacade.home.activation.restoreCodexDefaultPlugins.data;
+    assert lib.hasInfix "codex-computer-use-linux.bin"
+      centralFacade.home.activation.restoreCodexDefaultPlugins.data;
+    assert lib.hasInfix "refreshed bundled Computer Use helper"
+      centralFacade.home.activation.restoreCodexDefaultPlugins.data;
     assert
       centralFacade.programs.codexDesktopLinux.package.outPath
       == self.packages.${system}.codex-desktop-computer-use-ui.outPath;

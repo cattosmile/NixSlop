@@ -40,7 +40,10 @@ the official app with the community Linux Computer Use plugin, Linux UI
 feature patches, and NixSlop's Hyprland backend. The official executable and
 Electron runtime remain the base; NixSlop only adds the plugin bundle and its
 native helper. Home Manager also registers the bundled
-`computer-use@openai-bundled` plugin when the UI variant is enabled.
+`computer-use@openai-bundled` plugin when the UI variant is enabled. During
+activation it also repairs an already-installed Computer Use cache when its
+wrapper still points at an older NixSlop helper, so desktop package updates do
+not require manually deleting the plugin cache.
 `computerUse.enable` provides the optional ydotool/AT-SPI fallback runtime used
 by that plugin.
 

@@ -72,6 +72,25 @@ let
       "computerUseUi"
       "enable"
     ] false config;
+  desktopPackage =
+    if hasDesktopComputerUseOption then
+      lib.attrByPath [
+        "programs"
+        "codexDesktopLinux"
+        "package"
+      ] null config
+    else
+      null;
+  computerUseBinaries =
+    if desktopComputerUseEnabled && desktopPackage != null then
+      lib.attrByPath [ "computerUseBinaries" ] null desktopPackage
+    else
+      null;
+  computerUseHelperPath =
+    if computerUseBinaries == null then
+      null
+    else
+      "${computerUseBinaries}/bin/codex-computer-use-linux.bin";
   computerUsePlugins = lib.optional desktopComputerUseEnabled "computer-use@openai-bundled";
 in
 {
@@ -112,9 +131,11 @@ in
       description = ''
         Restore Codex's default document, spreadsheet, presentation, PDF,
         template, Teams, and Outlook Calendar plugins when they are available.
-        The activation only adds missing plugin entries and never touches Codex
-        authentication, account data, skills, or existing plugin entries. It is
-        skipped when native `programs.codex` owns the generated config file.
+        The activation only adds missing plugin entries and repairs the
+        NixSlop-managed Computer Use helper when its cache points at an older
+        Nix store path. It never touches Codex authentication, account data,
+        skills, or unrelated plugin entries. It is skipped when native
+        `programs.codex` owns the generated config file.
       '';
     };
 
@@ -206,6 +227,10 @@ in
                 codex_home="${config.home.homeDirectory}/.codex"
                 codex_config="$codex_home/config.toml"
                 primary_runtime="${cfg.primaryRuntimePath}"
+                computer_use_cache="$codex_home/plugins/cache/openai-bundled/computer-use"
+                expected_computer_use_helper="${
+                  if computerUseHelperPath == null then "" else computerUseHelperPath
+                }"
 
                 # The primary runtime is downloaded by Codex Desktop and is not part
                 # of NixSlop. Do not create or replace it when it is unavailable.
@@ -214,6 +239,28 @@ in
                   if ! CODEX_HOME="$codex_home" "$codex_bin" plugin marketplace add "$primary_runtime" >/dev/null 2>&1; then
                     echo "NixSlop: could not register Codex primary-runtime marketplace; keeping existing config" >&2
                   fi
+                fi
+
+                # Codex keeps installed plugin payloads in a mutable, versioned cache.
+                # An existing computer-use entry is normally left untouched, which
+                # can preserve a helper from an older NixSlop generation even after
+                # the desktop package has been upgraded. Repair only this managed
+                # helper wrapper and leave the plugin manifest, settings, and other
+                # user-owned plugin data unchanged.
+                if [ -n "$expected_computer_use_helper" ] \
+                  && [ -f "$codex_config" ] \
+                  && grep -Fq '[plugins."computer-use@openai-bundled"]' "$codex_config" 2>/dev/null; then
+                  for wrapper in "$computer_use_cache"/*/bin/codex-computer-use-linux; do
+                    if [ -f "$wrapper" ] \
+                      && ! grep -Fq "$expected_computer_use_helper" "$wrapper" 2>/dev/null \
+                      && grep -Fq 'codex-computer-use-linux.bin' "$wrapper" 2>/dev/null; then
+                      replacement="exec \"$expected_computer_use_helper\" \"\$@\""
+                      ${pkgs.gnused}/bin/sed -i \
+                        -e "s#^exec \".*/codex-computer-use-linux[.]bin\".*#''${replacement}#" \
+                        "$wrapper"
+                      echo "NixSlop: refreshed bundled Computer Use helper in $wrapper" >&2
+                    fi
+                  done
                 fi
 
                 for plugin in ${

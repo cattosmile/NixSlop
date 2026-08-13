@@ -86,11 +86,13 @@ Codex files:
 - Mutable `omx setup --plugin` owns Codex configuration when
   `programs.codexOmx.setupPlugin = true`; the module rejects simultaneous
   native Codex file generation.
-- `programs.codexOmx.restoreDefaultPlugins` owns only the additive registration
-  of Codex's shipped default plugin IDs. It invokes the Codex CLI after OMX,
-  skips unavailable runtime marketplaces, and never owns authentication,
-  account slots, skills, or existing plugin entries. Native Home Manager Codex
-  configuration is left to its declarative plugin options instead.
+- `programs.codexOmx.restoreDefaultPlugins` owns the additive registration of
+  Codex's shipped default plugin IDs and repairs the NixSlop-managed Computer
+  Use cache wrapper when it points at an older helper. It invokes the Codex CLI
+  after OMX, skips unavailable runtime marketplaces, and never owns
+  authentication, account slots, skills, or unrelated plugin entries. Native
+  Home Manager Codex configuration is left to its declarative plugin options
+  instead.
 - `programs.codexComputerUse` owns the legacy user-space Computer Use runtime: the
   AT-SPI D-Bus and systemd user units, the ydotool client, the per-user
   `ydotoold` service, and `YDOTOOL_SOCKET`. When the legacy NixOS module is
