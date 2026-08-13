@@ -257,6 +257,27 @@ let
       }
     ]).config;
 
+  centralFacadeOptOut =
+    (mkHome [
+      self.homeManagerModules.default
+      {
+        programs.nixslop = {
+          codex.enable = true;
+          desktop = {
+            enable = true;
+            computerUseUi.enable = true;
+            hyprland.enable = false;
+          };
+          computerUse.enable = true;
+        };
+        wayland.windowManager.hyprland = {
+          enable = true;
+          configType = "lua";
+          settings.input.kb_layout = "de";
+        };
+      }
+    ]).config;
+
   omxFacadeOnly =
     (mkHome [
       self.homeManagerModules.default
@@ -469,7 +490,16 @@ let
     assert centralFacade.programs.codexDesktopLinux.computerUseUi.enable;
     assert centralFacade.programs.codexDesktopLinux.remoteMobileControl.enable;
     assert centralFacade.programs.codexComputerUse.enable;
-    assert !centralFacade.programs.codexComputerUseHyprland.enable;
+    assert centralFacade.programs.nixslop.desktop.hyprland.enable;
+    assert centralFacade.programs.codexComputerUseHyprland.enable;
+    assert
+      lib.attrByPath [ "wayland" "windowManager" "hyprland" "settings" "device" ] [ ] centralFacade
+      == expectedVirtualDevice;
+    assert !centralFacadeOptOut.programs.nixslop.desktop.hyprland.enable;
+    assert !centralFacadeOptOut.programs.codexComputerUseHyprland.enable;
+    assert
+      lib.attrByPath [ "wayland" "windowManager" "hyprland" "settings" "device" ] [ ] centralFacadeOptOut
+      == [ ];
     assert lib.hasInfix "computer-use@openai-bundled"
       centralFacade.home.activation.restoreCodexDefaultPlugins.data;
     assert lib.hasInfix "plugins/cache/openai-bundled/computer-use"

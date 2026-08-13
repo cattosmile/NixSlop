@@ -8,6 +8,12 @@
 
 let
   cfg = config.programs.nixslop;
+  hyprlandEnabled = lib.attrByPath [
+    "wayland"
+    "windowManager"
+    "hyprland"
+    "enable"
+  ] false config;
 in
 {
   imports = [
@@ -36,10 +42,12 @@ in
 
       hyprland.enable = lib.mkOption {
         type = lib.types.bool;
-        default = false;
+        default = hyprlandEnabled;
         description = ''
           Configure the Hyprland keymap for the ydotool Computer Use virtual
-          device used by the NixSlop Linux plugin.
+          device used by the NixSlop Linux plugin. This is enabled
+          automatically when Home Manager's Hyprland module is enabled and can
+          be set to false to opt out.
         '';
       };
     };

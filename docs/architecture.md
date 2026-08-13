@@ -61,8 +61,9 @@ The following are intentionally stable:
 - `programs.codexDesktopLinux.computerUseUi.enable` selects the official-app
   Linux Computer Use variant; historical package override arguments remain
   accepted for compatibility.
-- The isolated US mapping for `ydotoold-virtual-device` and its explicit
-  Home Manager opt-out.
+- The isolated US mapping for `ydotoold-virtual-device`, automatically enabled
+  when Home Manager's Hyprland module is active, with an explicit Home Manager
+  opt-out.
 
 The desktop contract verifies the pinned official package, its launcher and
 desktop entry, and the bundled native Linux Computer Use helper. Feature

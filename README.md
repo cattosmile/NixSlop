@@ -27,7 +27,6 @@ Then add the aggregate module to the user's Home Manager configuration:
     desktop.enable = true;
     desktop.computerUseUi.enable = true;
     computerUse.enable = true;
-    desktop.hyprland.enable = true;
   };
 }
 ```
@@ -78,8 +77,10 @@ for another application, enable it independently:
 ```
 
 The Home Manager `ydotoold` service remains available for the NixSlop Computer
-Use plugin. Enable it with `programs.nixslop.computerUse.enable = true`; on
-Hyprland, also enable `programs.nixslop.desktop.hyprland.enable = true`.
+Use plugin. Enable it with `programs.nixslop.computerUse.enable = true`. When
+Home Manager's Hyprland module is enabled, NixSlop automatically configures
+the US keymap for its virtual Computer Use keyboard. Set
+`programs.nixslop.desktop.hyprland.enable = false` to opt out.
 
 That legacy service runs as the desktop user, who needs read/write access to
 `/dev/uinput`. Device permissions are system-level and cannot be managed by
