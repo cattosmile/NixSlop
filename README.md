@@ -46,6 +46,13 @@ not require manually deleting the plugin cache.
 `computerUse.enable` provides the optional ydotool/AT-SPI fallback runtime used
 by that plugin.
 
+On Hyprland, the Computer Use screenshot backend captures with Grim at scale
+`1` (logical desktop pixels). This keeps screenshots, Hyprland window bounds,
+AT-SPI coordinates, and pointer input in one coordinate space even with mixed
+monitor resolutions, fractional scaling, negative monitor origins, or rotated
+outputs. The image is intentionally logical-sized; it avoids requiring the
+agent to apply a monitor-specific 1.5x conversion.
+
 `programs.nixslop.omx.enable = true` is an equivalent selector for the current
 combined Codex/oh-my-codex integration; normally use one of `codex.enable` or
 `omx.enable`. Do not enable Home Manager's native `programs.codex` module

@@ -1,0 +1,45 @@
+--- a/computer-use-linux/src/windowing/backends/hyprland.rs
++++ b/computer-use-linux/src/windowing/backends/hyprland.rs
+@@ -168,6 +168,7 @@ impl HyprlandCaptureLayout {
+                 .unwrap_or(first.y),
+-            scale: monitors
+-                .iter()
+-                .map(|monitor| monitor.scale)
+-                .fold(first.scale, f64::max),
++            // NixSlop's Hyprland screenshot backend invokes grim with `-s 1`.
++            // Keep window bounds and geometry operations in the compositor's
++            // logical desktop pixel space so mixed output scales do not leak
++            // into the Computer Use coordinate contract.
++            scale: 1.0,
+         })
+@@ -519,4 +520,4 @@ mod tests {
+         let bounds = windows[0].bounds.as_ref().unwrap();
+-        assert_eq!((bounds.x, bounds.y), (Some(1934), Some(2988)));
+-        assert_eq!((bounds.width, bounds.height), (1862, 2248));
++        assert_eq!((bounds.x, bounds.y), (Some(967), Some(1494)));
++        assert_eq!((bounds.width, bounds.height), (931, 1124));
+     }
+@@ -540,4 +541,4 @@ mod tests {
+         let bounds = windows[0].bounds.as_ref().unwrap();
+-        assert_eq!((bounds.x, bounds.y), (Some(240), Some(200)));
+-        assert_eq!((bounds.width, bounds.height), (1200, 800));
++        assert_eq!((bounds.x, bounds.y), (Some(120), Some(100)));
++        assert_eq!((bounds.width, bounds.height), (600, 400));
+     }
+@@ -545,3 +546,3 @@ mod tests {
+     #[test]
+-    fn fractional_scale_rounds_crop_edges_outward() {
++    fn logical_capture_preserves_fractional_monitor_geometry() {
+         let clients = r#"[{
+@@ -559,3 +560,3 @@ mod tests {
+         assert_eq!((bounds.x, bounds.y), (Some(1), Some(1)));
+-        assert_eq!((bounds.width, bounds.height), (2, 2));
++        assert_eq!((bounds.width, bounds.height), (1, 1));
+     }
+@@ -581,4 +582,4 @@ mod tests {
+-        assert_eq!(layout.capture_point_to_hyprland([1653, 33]).unwrap(), [22, 22]);
++        assert_eq!(layout.capture_point_to_hyprland([1102, 22]).unwrap(), [22, 22]);
+         assert_eq!(layout.capture_point_to_hyprland([0, 0]).unwrap(), [-1080, 0]);
+-        assert_eq!(layout.capture_size_to_hyprland([3716, 2094]).unwrap(), [2477, 1396]);
++        assert_eq!(layout.capture_size_to_hyprland([2477, 1396]).unwrap(), [2477, 1396]);
+     }

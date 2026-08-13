@@ -213,6 +213,8 @@ let
         patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use.patch}
         git -C "$out" apply --check --whitespace=nowarn ${./computer-use-hyprland-runtime.patch}
         git -C "$out" apply --whitespace=nowarn ${./computer-use-hyprland-runtime.patch}
+        git -C "$out" apply --check --whitespace=nowarn ${./computer-use-hyprland-logical-capture.patch}
+        git -C "$out" apply --whitespace=nowarn ${./computer-use-hyprland-logical-capture.patch}
         patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use-grim.patch}
         patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use-diagnostics-grim.patch}
 
@@ -226,6 +228,7 @@ let
         grep -Fq 'capture_point_to_hyprland' "$hyprland"
         grep -Fq 'Hyprland native window targeting is active' "$gnome_extension"
         grep -Fq 'capture_with_grim' "$screenshot"
+        grep -Fq '.args(["-s", "1", "-t", "png", filename])' "$screenshot"
         grep -Fq 'Self::Grim' "$screenshot"
         test "$(sed -n '/const BACKEND_ORDER/,/];/p' "$registry" | grep -n 'BackendKind::' | head -n 1 | cut -d: -f2-)" = \
           '    BackendKind::Hyprland,'

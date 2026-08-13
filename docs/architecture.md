@@ -40,8 +40,11 @@ Desktop package is also exposed as an opt-in NixSlop Computer Use variant. That
 variant keeps OpenAI's official executable, Electron runtime, native modules,
 and FHS layout intact, then stages the community Linux plugin and its feature
 patches into the official app while replacing only the native helper with
-NixSlop's Hyprland-first and grim-enabled backend. The Hyprland adapter changes
-only the virtual ydotool device, not physical keyboard layouts. When the UI
+NixSlop's Hyprland-first and grim-enabled backend. On Hyprland, Grim captures
+at logical scale `1` so window bounds, screenshots, AT-SPI coordinates, and
+pointer input share one coordinate space across mixed-DPI and rotated monitors.
+The Hyprland adapter changes only the virtual ydotool device, not physical
+keyboard layouts. When the UI
 variant is enabled, the Home Manager activation also registers the local
 `computer-use@openai-bundled` plugin in Codex's mutable plugin configuration;
 the immutable package alone only makes that plugin available in the bundled
