@@ -1,10 +1,13 @@
 {
   pkgs,
+  codex-desktop-linux,
 }:
 
 let
   codex = pkgs.callPackage ./codex/package.nix { };
-  chatgptDesktop = pkgs.callPackage ./chatgpt-desktop/package.nix { };
+  chatgptDesktop = pkgs.callPackage ./chatgpt-desktop/package.nix {
+    inherit codex-desktop-linux;
+  };
 in
 {
   inherit codex;

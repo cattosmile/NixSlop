@@ -36,22 +36,26 @@ configuration and secrets stay outside this repository. The Home Manager
 modules own user packages, generated files, and user-session services. The
 NixOS module is retained only as a legacy fallback for systems that need a
 system-level ydotool daemon or device/group integration. The official ChatGPT
-Desktop package has its own native Linux Computer Use runtime. The legacy
-Hyprland adapter changes only the virtual ydotool device, not physical keyboard
-layouts.
+Desktop package is also exposed as an opt-in NixSlop Computer Use variant. That
+variant stages the community Linux plugin and its feature patches into the
+official app, while replacing the native helper with NixSlop's Hyprland-first
+and grim-enabled backend. The Hyprland adapter changes only the virtual
+ydotool device, not physical keyboard layouts.
 
 ## Public compatibility boundary
 
 The following are intentionally stable:
 
 - The package outputs `codex`, `chatgpt-desktop`, and `oh-my-codex`.
-- The historical `codex-desktop-*` outputs remain as aliases of
-  `chatgpt-desktop` during the migration.
+- The historical `codex-desktop` and `codex-computer-use-linux` outputs remain
+  aliases of `chatgpt-desktop`; `codex-desktop-computer-use-ui` is the explicit
+  patched variant.
 - Aggregate Home Manager modules `default` and `nixslop`.
 - Individual Home Manager module names and their historical option paths.
 - NixOS modules `default` and `codexComputerUse`.
-- Historical Codex Desktop override arguments are accepted for compatibility,
-  but no longer patch or rebuild the official package.
+- `programs.codexDesktopLinux.computerUseUi.enable` selects the official-app
+  Linux Computer Use variant; historical package override arguments remain
+  accepted for compatibility.
 - The isolated US mapping for `ydotoold-virtual-device` and its explicit
   Home Manager opt-out.
 
@@ -89,9 +93,10 @@ Codex files:
   daemon.
 - `programs.nixslop` is the consumer-facing setup facade. Its `codex` and
   `omx` selectors target the current combined Codex/OMX module; `desktop` selects
-  the official ChatGPT Desktop package and `computerUse` explicitly selects the
-  legacy ydotool integration. The historical option paths remain public for
-  advanced configuration and compatibility.
+  the official ChatGPT Desktop package, `desktop.computerUseUi` selects the
+  patched Linux Computer Use variant, and `computerUse` provides its optional
+  ydotool/AT-SPI fallback integration. The historical option paths remain
+  public for advanced configuration and compatibility.
 - `nixosModules.codexComputerUse` remains a compatibility boundary for systems
   that need a system-level `ydotoold` service or NixOS-wide device/group
   integration. It is not required for the normal Home Manager setup.

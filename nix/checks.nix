@@ -14,6 +14,7 @@ let
   };
   codex = self.packages.${system}.codex;
   chatgptDesktop = self.packages.${system}.chatgpt-desktop;
+  chatgptDesktopComputerUse = self.packages.${system}.codex-desktop-computer-use-ui;
 
   assertionCheck =
     name: condition:
@@ -52,6 +53,36 @@ in
     test -x ${chatgptDesktop}/usr/lib/chatgpt/resources/cua_node/lib/node_modules/@oai/sky/bin/linux/sky_linux_x64
     touch "$out"
   '';
+
+  chatgpt-desktop-computer-use-contract =
+    pkgs.runCommand "nixslop-chatgpt-desktop-computer-use-contract"
+      {
+        nativeBuildInputs = [ pkgs.jq ];
+      }
+      ''
+        plugin=${chatgptDesktopComputerUse}/opt/codex-desktop/resources/plugins/openai-bundled/plugins/computer-use
+        marketplace=${chatgptDesktopComputerUse}/opt/codex-desktop/resources/plugins/openai-bundled/.agents/plugins/marketplace.json
+        patchReport=${chatgptDesktopComputerUse}/opt/codex-desktop/.codex-linux/patch-report.json
+        test -x ${chatgptDesktopComputerUse}/bin/chatgpt
+        test -x ${chatgptDesktopComputerUse}/bin/codex-desktop
+        test -x "$plugin/bin/codex-computer-use-linux"
+        test -x "$plugin/bin/codex-computer-use-cosmic"
+        test -x "$plugin/bin/codex-chrome-extension-host"
+        test -f "$plugin/.codex-plugin/plugin.json"
+        test -f "$plugin/.mcp.json"
+        test -f "$plugin/assets/app-icon.png"
+        jq -e '.plugins | any(.name == "computer-use" and .source.path == "./plugins/computer-use")' "$marketplace" >/dev/null
+        jq -e '.enabledFeatures | index("computer-use-linux") != null' "$patchReport" >/dev/null
+        jq -e '
+          [.patches[] | select(.name == "feature:computer-use-linux:ui-availability" or .name == "feature:computer-use-linux:host-platform" or .name == "feature:computer-use-linux:install-flow") | .status]
+          | length == 3 and all(. == "applied" or . == "already-applied")
+        ' "$patchReport" >/dev/null
+        source=${chatgptDesktopComputerUse.computerUseBinaries.computerUseSource}
+        grep -Fq 'BackendKind::Hyprland,' "$source/computer-use-linux/src/windowing/registry.rs"
+        grep -Fq 'HYPRLAND_BACKEND => hyprland::move_window' "$source/computer-use-linux/src/windowing/registry.rs"
+        grep -Fq 'capture_with_grim' "$source/computer-use-linux/src/screenshot.rs"
+        touch "$out"
+      '';
 }
 // lib.optionalAttrs (builtins.pathExists ../.github/workflows) {
   actionlint =

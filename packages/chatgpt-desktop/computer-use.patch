@@ -1,0 +1,113 @@
+--- a/computer-use-linux/src/windowing/registry.rs
++++ b/computer-use-linux/src/windowing/registry.rs
+@@ -44,11 +44,11 @@
+ }
+
+ const BACKEND_ORDER: &[BackendKind] = &[
++    BackendKind::Hyprland,
+     BackendKind::GnomeExtension,
+     BackendKind::GnomeIntrospect,
+     BackendKind::Cosmic,
+     BackendKind::Kwin,
+-    BackendKind::Hyprland,
+     BackendKind::Niri,
+     BackendKind::I3,
+     // Generic X11/EWMH: last, so a session-native backend always wins first.
+@@ -250,24 +250,26 @@
+
+ pub async fn move_window(window: &WindowInfo, x: i32, y: i32) -> Result<String> {
+     match window.backend.as_str() {
++        HYPRLAND_BACKEND => hyprland::move_window(window.window_id, x, y).await,
+         GNOME_SHELL_EXTENSION_BACKEND => {
+             gnome::move_extension_window(window.window_id, x, y).await
+         }
+         X11_BACKEND => x11::move_window(window.window_id, x, y).await,
+         backend => Err(anyhow!(
+-            "Window backend {backend} cannot move windows; move_window needs the Codex GNOME Shell extension or a generic X11/EWMH session."
++            "Window backend {backend} cannot move windows; move_window needs Hyprland, the Codex GNOME Shell extension, or a generic X11/EWMH session."
+         )),
+     }
+ }
+
+ pub async fn resize_window(window: &WindowInfo, width: i32, height: i32) -> Result<String> {
+     match window.backend.as_str() {
++        HYPRLAND_BACKEND => hyprland::resize_window(window.window_id, width, height).await,
+         GNOME_SHELL_EXTENSION_BACKEND => {
+             gnome::resize_extension_window(window.window_id, width, height).await
+         }
+         X11_BACKEND => x11::resize_window(window.window_id, width, height).await,
+         backend => Err(anyhow!(
+-            "Window backend {backend} cannot resize windows; resize_window needs the Codex GNOME Shell extension or a generic X11/EWMH session."
++            "Window backend {backend} cannot resize windows; resize_window needs Hyprland, the Codex GNOME Shell extension, or a generic X11/EWMH session."
+         )),
+     }
+ }
+--- a/computer-use-linux/src/windowing/backends/hyprland.rs
++++ b/computer-use-linux/src/windowing/backends/hyprland.rs
+@@ -242,6 +242,57 @@
+     }
+ }
+
++pub async fn move_window(window_id: u64, x: i32, y: i32) -> Result<String> {
++    dispatch_window_pixel("move", "movewindowpixel", x, y, window_id)
++        .await
++        .map(|()| format!("Hyprland moved window 0x{window_id:x} to {x},{y}."))
++}
++
++pub async fn resize_window(window_id: u64, width: i32, height: i32) -> Result<String> {
++    if width <= 0 || height <= 0 {
++        bail!("Hyprland window size must be positive, got {width}x{height}");
++    }
++    dispatch_window_pixel("resize", "resizewindowpixel", width, height, window_id)
++        .await
++        .map(|()| format!("Hyprland resized window 0x{window_id:x} to {width}x{height}."))
++}
++
++async fn dispatch_window_pixel(
++    lua_dispatcher: &str,
++    legacy_dispatcher: &str,
++    x: i32,
++    y: i32,
++    window_id: u64,
++) -> Result<()> {
++    let address = format!("address:0x{window_id:x}");
++    let lua_dispatch = lua_pixel_dispatch(lua_dispatcher, x, y, &address);
++    let lua_output = hyprctl_output_async(&["dispatch", &lua_dispatch])
++        .await
++        .with_context(|| {
++            format!("failed to run Hyprland Lua {lua_dispatcher} dispatcher for {address}")
++        })?;
++    if dispatch_succeeded(&lua_output) {
++        return Ok(());
++    }
++
++    let legacy_parameters = format!("exact {x} {y},{address}");
++    let legacy_output =
++        hyprctl_output_async(&["dispatch", legacy_dispatcher, &legacy_parameters])
++            .await
++            .with_context(|| {
++                format!("failed to run hyprctl dispatch {legacy_dispatcher} for {address}")
++            })?;
++    if dispatch_succeeded(&legacy_output) {
++        return Ok(());
++    }
++
++    bail!(
++        "Hyprland {lua_dispatcher} failed for {address}; Lua dispatcher: {}; legacy dispatcher: {}",
++        command_detail(&lua_output),
++        command_detail(&legacy_output)
++    )
++}
++
+ fn dispatch_succeeded(output: &std::process::Output) -> bool {
+     output.status.success() && String::from_utf8_lossy(&output.stdout).trim() == "ok"
+ }
+@@ -267 +318,7 @@
+-
++
++fn lua_pixel_dispatch(dispatcher: &str, x: i32, y: i32, address: &str) -> String {
++    format!(
++        "hl.dsp.window.{dispatcher}({{ x = {x}, y = {y}, relative = false, window = \"{address}\" }})"
++    )
++}
++

@@ -451,8 +451,9 @@ let
     assert lib.hasAttrByPath [ "programs" "nixslop" "omx" "enable" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "nixslop" "desktop" "enable" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "nixslop" "computerUse" "enable" ] aggregateEval.options;
-    # The public alias composes the same modules. Both central entry points
-    # disable the legacy ydotool keymap unless it is explicitly requested.
+    # The public alias composes the same modules. The plain desktop fixture
+    # keeps the legacy ydotool keymap disabled unless it is explicitly
+    # requested.
     assert aggregateProjection aggregateAlias == aggregateProjection aggregate;
     assert
       aggregateProjection aggregate == {
@@ -466,6 +467,9 @@ let
     assert centralFacade.programs.codexDesktopLinux.remoteMobileControl.enable;
     assert centralFacade.programs.codexComputerUse.enable;
     assert !centralFacade.programs.codexComputerUseHyprland.enable;
+    assert
+      centralFacade.programs.codexDesktopLinux.package.outPath
+      == self.packages.${system}.codex-desktop-computer-use-ui.outPath;
     assert omxFacadeOnly.programs.codexOmx.enable;
     assert
       aggregate.programs.codexDesktopLinux.package.outPath

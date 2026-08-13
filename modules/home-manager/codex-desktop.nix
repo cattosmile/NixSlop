@@ -85,11 +85,21 @@ in
 
     package = lib.mkOption {
       type = lib.types.nullOr lib.types.package;
-      default = self.packages.${system}.chatgpt-desktop;
-      defaultText = lib.literalExpression "inputs.nixslop.packages.\${pkgs.stdenv.hostPlatform.system}.chatgpt-desktop";
+      default =
+        if cfg.computerUseUi.enable then
+          self.packages.${system}.codex-desktop-computer-use-ui
+        else
+          self.packages.${system}.chatgpt-desktop;
+      defaultText = lib.literalExpression ''
+        if config.programs.codexDesktopLinux.computerUseUi.enable
+        then inputs.nixslop.packages.\${pkgs.stdenv.hostPlatform.system}.codex-desktop-computer-use-ui
+        else inputs.nixslop.packages.\${pkgs.stdenv.hostPlatform.system}.chatgpt-desktop
+      '';
       description = ''
-        Official ChatGPT Desktop package to install. It contains the Codex
-        desktop experience and the native Linux Computer Use runtime.
+        Official ChatGPT Desktop package to install. Enabling
+        `computerUseUi.enable` selects the NixSlop package variant that adds
+        the community Linux Computer Use plugin and Hyprland backend to the
+        official app. Set this explicitly to override that selection.
         Set this to null to manage the application outside Home Manager.
       '';
     };
@@ -105,8 +115,9 @@ in
     };
 
     computerUseUi.enable = lib.mkEnableOption ''
-      the Computer Use UI compatibility flag. The official application owns
-      this feature and no longer needs a NixSlop patch variant.
+      the Linux Computer Use UI and Hyprland plugin integration. This selects
+      the official ChatGPT Desktop package with NixSlop's Linux Computer Use
+      plugin and feature patches.
     '';
 
     remoteMobileControl.enable = lib.mkEnableOption ''

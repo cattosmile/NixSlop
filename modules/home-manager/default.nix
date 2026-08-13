@@ -38,16 +38,15 @@ in
         type = lib.types.bool;
         default = false;
         description = ''
-          Configure the legacy Hyprland keymap for the ydotool Computer Use
-          virtual device. The official ChatGPT Desktop app does not need this.
+          Configure the Hyprland keymap for the ydotool Computer Use virtual
+          device used by the NixSlop Linux plugin.
         '';
       };
     };
 
     computerUse.enable = lib.mkEnableOption ''
-      the legacy ydotool/AT-SPI Linux Computer Use runtime. The official
-      ChatGPT Desktop app bundles its own native Computer Use backend, so this
-      is normally not needed.
+      the ydotool/AT-SPI fallback runtime used by the NixSlop Linux Computer Use
+      plugin. The plugin can also use native uinput and Wayland capture paths.
     '';
   };
 

@@ -39,6 +39,7 @@ let
 in
 assert packageNames == expectedPackageNames;
 assert pkgs.lib.isDerivation computerUseUiOverride;
+assert builtins.hasAttr "computerUseBinaries" computerUseUiOverride;
 assert pkgs.lib.isDerivation remoteMobileControlOverride;
 assert pkgs.lib.isDerivation allArgumentsOverride;
 assert packages.chatgpt-desktop.outPath == packages.codex-desktop.outPath;

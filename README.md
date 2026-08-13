@@ -25,6 +25,9 @@ Then add the aggregate module to the user's Home Manager configuration:
   programs.nixslop = {
     codex.enable = true;
     desktop.enable = true;
+    desktop.computerUseUi.enable = true;
+    computerUse.enable = true;
+    desktop.hyprland.enable = true;
   };
 }
 ```
@@ -32,20 +35,19 @@ Then add the aggregate module to the user's Home Manager configuration:
 This installs the official OpenAI ChatGPT Desktop app for Linux, its Codex
 integration, the NixSlop Codex CLI, oh-my-codex, and tmux. The app is launched
 as `chatgpt`; the historical `codex-desktop` launcher name remains available
-as a compatibility alias. The official app includes its own Linux Computer Use
-backend, so the normal setup does not need `ydotoold` or
-`services.codexComputerUse`.
+as a compatibility alias. Enabling `desktop.computerUseUi` selects a variant of
+the official app with the community Linux Computer Use plugin, Linux UI
+feature patches, and NixSlop's Hyprland backend. `computerUse.enable` provides
+the optional ydotool/AT-SPI fallback runtime used by that plugin.
 
 `programs.nixslop.omx.enable = true` is an equivalent selector for the current
 combined Codex/oh-my-codex integration; normally use one of `codex.enable` or
 `omx.enable`. Do not enable Home Manager's native `programs.codex` module
 together with this setup unless you intentionally want its declarative mode.
 
-The compatibility flags
-`programs.nixslop.desktop.computerUseUi.enable` and
-`programs.nixslop.desktop.remoteMobileControl.enable` are retained for existing
-configurations. Feature availability for the official app is controlled by the
-app itself; these flags no longer select patched Nix package variants.
+`programs.nixslop.desktop.remoteMobileControl.enable` remains a compatibility
+flag. `desktop.computerUseUi.enable` is now functional and selects the patched
+official-app package variant.
 
 The official Debian package is unpacked and run inside a Nix FHS environment.
 It is pinned by version and hash in `packages/chatgpt-desktop/source.nix`, so
@@ -68,11 +70,9 @@ for another application, enable it independently:
 }
 ```
 
-The legacy Home Manager `ydotoold` service remains available for users who
-explicitly need the old NixSlop Computer Use backend. Enable it with
-`programs.nixslop.computerUse.enable = true`; on Hyprland, also enable
-`programs.nixslop.desktop.hyprland.enable = true`. This is not required by the
-official ChatGPT Desktop app.
+The Home Manager `ydotoold` service remains available for the NixSlop Computer
+Use plugin. Enable it with `programs.nixslop.computerUse.enable = true`; on
+Hyprland, also enable `programs.nixslop.desktop.hyprland.enable = true`.
 
 That legacy service runs as the desktop user, who needs read/write access to
 `/dev/uinput`. Device permissions are system-level and cannot be managed by
