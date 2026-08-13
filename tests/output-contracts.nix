@@ -40,6 +40,12 @@ in
 assert packageNames == expectedPackageNames;
 assert pkgs.lib.isDerivation computerUseUiOverride;
 assert builtins.hasAttr "computerUseBinaries" computerUseUiOverride;
+assert
+  computerUseUiOverride.passthru.desktopContents.outPath
+  == computerUseUiOverride.passthru.computerUseContents.outPath;
+assert
+  packages.chatgpt-desktop.passthru.desktopContents.outPath
+  == packages.chatgpt-desktop.passthru.contents.outPath;
 assert pkgs.lib.isDerivation remoteMobileControlOverride;
 assert pkgs.lib.isDerivation allArgumentsOverride;
 assert packages.chatgpt-desktop.outPath == packages.codex-desktop.outPath;

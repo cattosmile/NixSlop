@@ -57,10 +57,14 @@ in
   chatgpt-desktop-computer-use-contract =
     pkgs.runCommand "nixslop-chatgpt-desktop-computer-use-contract"
       {
-        nativeBuildInputs = [ pkgs.jq ];
+        nativeBuildInputs = [
+          pkgs.asar
+          pkgs.jq
+        ];
       }
       ''
         appRoot=${chatgptDesktopComputerUse}/usr/lib/chatgpt
+        appAsar=${chatgptDesktopComputerUse.fhsenv}/usr/lib64/chatgpt/resources/app.asar
         plugin=$appRoot/resources/plugins/openai-bundled/plugins/computer-use
         marketplace=$appRoot/resources/plugins/openai-bundled/.agents/plugins/marketplace.json
         patchReport=${chatgptDesktopComputerUse.patchedComputerUsePackage}/opt/codex-desktop/.codex-linux/patch-report.json
@@ -68,6 +72,13 @@ in
         test -x ${chatgptDesktopComputerUse}/bin/codex-desktop
         test -x "$appRoot/ChatGPT"
         test -f "$appRoot/resources/app.asar"
+        test -f "$appAsar"
+        mainFile=$(asar list "$appAsar" | sed -n 's#^/\.vite/build/\(main-[^/]*\.js\)$#\1#p' | head -n 1)
+        test -n "$mainFile"
+        mainDir=$(mktemp -d)
+        (cd "$mainDir" && asar extract-file "$appAsar" ".vite/build/$mainFile")
+        grep -Eq 'isAvailable:\(\{features:[^}]+,platform:[^}]+\}\)=>[A-Za-z_$][A-Za-z0-9_$]*===`linux`\|\|[A-Za-z_$][A-Za-z0-9_$]*===`darwin`&&[A-Za-z_$][A-Za-z0-9_$]*\.computerUse' \
+          "$mainDir/$mainFile"
         test -x "$plugin/bin/codex-computer-use-linux"
         test -x "$plugin/bin/codex-computer-use-cosmic"
         test -x "$plugin/bin/codex-chrome-extension-host"

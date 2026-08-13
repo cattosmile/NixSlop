@@ -83,8 +83,14 @@ let
     '';
   };
 
-  officialPackage = buildFHSEnv {
-    pname = "chatgpt-desktop";
+  # Select the payload before constructing the FHS environment. `buildFHSEnv`
+  # creates a nested rootfs derivation; overriding the outer package afterwards
+  # does not replace the rootfs that its launcher mounts at runtime.
+  desktopContents = if enableComputerUseUi then computerUseContents else contents;
+  desktopPname = if enableComputerUseUi then "chatgpt-desktop-computer-use" else "chatgpt-desktop";
+
+  desktopPackage = buildFHSEnv {
+    pname = desktopPname;
     inherit (source) version;
     executableName = "chatgpt";
     runScript = "/usr/lib/chatgpt/ChatGPT";
@@ -137,19 +143,19 @@ let
     # Electron resources at runtime.
     extraBuildCommands = ''
       install -d "$out/usr/lib64"
-      cp -a ${contents}/usr/lib/chatgpt "$out/usr/lib64/"
+      cp -a ${desktopContents}/usr/lib/chatgpt "$out/usr/lib64/"
     '';
 
     extraInstallCommands = ''
       install -d "$out/usr/lib" "$out/share/applications"
-      cp -a ${contents}/usr/lib/chatgpt "$out/usr/lib/"
+      cp -a ${desktopContents}/usr/lib/chatgpt "$out/usr/lib/"
 
-      if [ -d ${contents}/usr/share/icons ]; then
-        cp -a ${contents}/usr/share/icons "$out/share/"
+      if [ -d ${desktopContents}/usr/share/icons ]; then
+        cp -a ${desktopContents}/usr/share/icons "$out/share/"
       fi
 
       install -Dm0644 \
-        ${contents}/usr/share/applications/chatgpt.desktop \
+        ${desktopContents}/usr/share/applications/chatgpt.desktop \
         "$out/share/applications/chatgpt.desktop"
       substituteInPlace "$out/share/applications/chatgpt.desktop" \
         --replace-fail 'Exec=chatgpt %U' "Exec=$out/bin/chatgpt %U"
@@ -160,7 +166,14 @@ let
     '';
 
     passthru = {
-      inherit contents sourceSpec;
+      inherit
+        contents
+        computerUseBinaries
+        computerUseContents
+        desktopContents
+        patchedComputerUsePackage
+        sourceSpec
+        ;
       inherit enableComputerUseUi linuxFeatureIds linuxFeaturesConfigOverride;
     };
 
@@ -288,37 +301,5 @@ let
     '';
   };
 
-  computerUsePackage = officialPackage.overrideAttrs (old: {
-    pname = "chatgpt-desktop-computer-use";
-
-    extraBuildCommands = ''
-      install -d "$out/usr/lib64"
-      cp -a ${computerUseContents}/usr/lib/chatgpt "$out/usr/lib64/"
-    '';
-
-    extraInstallCommands = ''
-      install -d "$out/usr/lib" "$out/share/applications"
-      cp -a ${computerUseContents}/usr/lib/chatgpt "$out/usr/lib/"
-
-      if [ -d ${computerUseContents}/usr/share/icons ]; then
-        cp -a ${computerUseContents}/usr/share/icons "$out/share/"
-      fi
-
-      install -Dm0644 \
-        ${computerUseContents}/usr/share/applications/chatgpt.desktop \
-        "$out/share/applications/chatgpt.desktop"
-      substituteInPlace "$out/share/applications/chatgpt.desktop" \
-        --replace-fail 'Exec=chatgpt %U' "Exec=$out/bin/chatgpt %U"
-
-      ln -s chatgpt "$out/bin/codex-desktop"
-    '';
-
-    passthru = {
-      inherit computerUseBinaries computerUseContents patchedComputerUsePackage;
-      inherit enableComputerUseUi linuxFeatureIds linuxFeaturesConfigOverride;
-    };
-
-    meta = officialPackage.meta or { };
-  });
 in
-if enableComputerUseUi then computerUsePackage else officialPackage
+desktopPackage
