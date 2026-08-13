@@ -47,6 +47,7 @@ in
     test -x ${chatgptDesktop}/bin/codex-desktop
     test -f ${chatgptDesktop}/share/applications/chatgpt.desktop
     grep -Fq 'Exec=${chatgptDesktop}/bin/chatgpt %U' ${chatgptDesktop}/share/applications/chatgpt.desktop
+    test -x ${chatgptDesktop.fhsenv}/usr/lib64/chatgpt/ChatGPT
     test -x ${chatgptDesktop}/usr/lib/chatgpt/ChatGPT
     test -x ${chatgptDesktop}/usr/lib/chatgpt/resources/cua_node/lib/node_modules/@oai/sky/bin/linux/sky_linux_x64
     touch "$out"

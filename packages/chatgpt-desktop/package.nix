@@ -125,6 +125,15 @@ buildFHSEnv {
     xz
   ];
 
+  # The application is unpacked outside the FHS dependency root. Copy it into
+  # the rootfs before buildFHSEnv creates its /usr/lib -> /usr/lib64 symlink so
+  # the generated /init launcher can find the executable and its adjacent
+  # Electron resources at runtime.
+  extraBuildCommands = ''
+    install -d "$out/usr/lib64"
+    cp -a ${contents}/usr/lib/chatgpt "$out/usr/lib64/"
+  '';
+
   extraInstallCommands = ''
     install -d "$out/usr/lib" "$out/share/applications"
     cp -a ${contents}/usr/lib/chatgpt "$out/usr/lib/"
