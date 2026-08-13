@@ -14,7 +14,7 @@ Add NixSlop to the `inputs` of your system flake:
 
 ## Home Manager
 
-Then add this module to the user's Home Manager configuration:
+Then add the aggregate module to the user's Home Manager configuration:
 
 ```nix
 { inputs, ... }:
@@ -24,36 +24,43 @@ Then add this module to the user's Home Manager configuration:
 
   programs.nixslop = {
     codex.enable = true;
-    desktop = {
-      enable = true;
-      computerUseUi.enable = true;
-      remoteMobileControl.enable = true;
-    };
-    computerUse.enable = true;
+    desktop.enable = true;
   };
 }
 ```
 
-This installs Codex Desktop, the Computer Use UI, the Linux Computer Use
-runtime, Remote Mobile Control, Codex CLI, oh-my-codex, and tmux. The Computer
-Use runtime is managed by Home Manager: it installs AT-SPI2 and ydotool,
-registers the AT-SPI D-Bus services, and starts a per-user `ydotoold` service
-with a private socket. `programs.nixslop.omx.enable = true` is an equivalent
-selector for the current combined Codex/oh-my-codex integration; normally use
-one of `codex.enable` or `omx.enable`. Do not enable Home Manager's native
-`programs.codex` module together with this setup.
+This installs the official OpenAI ChatGPT Desktop app for Linux, its Codex
+integration, the NixSlop Codex CLI, oh-my-codex, and tmux. The app is launched
+as `chatgpt`; the historical `codex-desktop` launcher name remains available
+as a compatibility alias. The official app includes its own Linux Computer Use
+backend, so the normal setup does not need `ydotoold` or
+`services.codexComputerUse`.
 
-The central `programs.nixslop` options are a convenience facade over the
-historical module paths. Existing configurations using
+`programs.nixslop.omx.enable = true` is an equivalent selector for the current
+combined Codex/oh-my-codex integration; normally use one of `codex.enable` or
+`omx.enable`. Do not enable Home Manager's native `programs.codex` module
+together with this setup unless you intentionally want its declarative mode.
+
+The compatibility flags
+`programs.nixslop.desktop.computerUseUi.enable` and
+`programs.nixslop.desktop.remoteMobileControl.enable` are retained for existing
+configurations. Feature availability for the official app is controlled by the
+app itself; these flags no longer select patched Nix package variants.
+
+The official Debian package is unpacked and run inside a Nix FHS environment.
+It is pinned by version and hash in `packages/chatgpt-desktop/source.nix`, so
+Nix never runs Debian maintainer scripts or modifies `/etc/apt`. The updater
+workflow reads OpenAI's package index and refreshes only that source pin.
+
+The historical module paths remain available for advanced configuration:
 `programs.codexDesktopLinux`, `programs.codexComputerUse`,
-`programs.codexOmx`, or `programs.codexComputerUseHyprland` remain supported,
-including their advanced package and daemon options.
+`programs.codexOmx`, and `programs.codexComputerUseHyprland`.
 
 ## NixOS integration
 
-The normal setup does not import the NixSlop NixOS module or define
-`services.codexComputerUse`. If your NixOS desktop configuration does not
-already enable AT-SPI2, keep only this built-in system option:
+The normal official-app setup does not import a NixSlop NixOS module and does
+not define `services.codexComputerUse`. If the desktop session needs AT-SPI2
+for another application, enable it independently:
 
 ```nix
 {
@@ -61,19 +68,18 @@ already enable AT-SPI2, keep only this built-in system option:
 }
 ```
 
-NixOS sets `NO_AT_BRIDGE=1` and `GTK_A11Y=none` when its AT-SPI2 option is
-disabled. The Home Manager module removes those values from shell sessions,
-but enabling AT-SPI2 at the system level is the most reliable choice for
-desktop applications launched directly by the graphical session.
+The legacy Home Manager `ydotoold` service remains available for users who
+explicitly need the old NixSlop Computer Use backend. Enable it with
+`programs.nixslop.computerUse.enable = true`; on Hyprland, also enable
+`programs.nixslop.desktop.hyprland.enable = true`. This is not required by the
+official ChatGPT Desktop app.
 
-The Home Manager `ydotoold` service runs as the desktop user, so that user must
-have read/write access to `/dev/uinput`. Device permissions are system-level
-and cannot be managed by Home Manager. For example, add the user to the
-system's `uinput` group if your distribution does not already provide a
-`uaccess` rule.
+That legacy service runs as the desktop user, who needs read/write access to
+`/dev/uinput`. Device permissions are system-level and cannot be managed by
+Home Manager. Add the user to the system's `uinput` group if the distribution
+does not already provide a suitable `uaccess` rule.
 
-If the user service cannot access `/dev/uinput`, the existing NixOS module is
-available as a fallback:
+If the user service cannot access `/dev/uinput`, the optional NixOS fallback is:
 
 ```nix
 { inputs, ... }:
@@ -94,6 +100,12 @@ starting a second daemon. For standalone Home Manager, set
 `programs.codexComputerUse.ydotoold.enable = false` and
 `programs.codexComputerUse.ydotoold.socket = "/run/ydotoold/socket"` when using
 the system daemon.
+
+The official Linux app is currently distributed by OpenAI as a preview for
+Ubuntu/Debian/Fedora. NixSlop packages the official `.deb` for NixOS on
+x86_64-linux and aarch64-linux; the `.rpm` is not needed on NixOS. See the
+[official Linux app documentation](https://learn.chatgpt.com/docs/linux/linux-app)
+for OpenAI's supported distributions and installation details.
 
 ## Cachix
 

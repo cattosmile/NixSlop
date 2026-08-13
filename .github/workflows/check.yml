@@ -48,7 +48,7 @@ jobs:
         id: evaluate_flake
         run: nix flake check --all-systems --no-build --print-build-logs
 
-      - name: Build module and patch-source checks
+      - name: Build module and desktop package checks
         id: build_contract_checks
         run: |
           nix build --no-link \
@@ -58,8 +58,7 @@ jobs:
             .#checks.x86_64-linux.formatting \
             .#checks.x86_64-linux.actionlint \
             .#checks.x86_64-linux.workflow-contracts \
-            .#checks.x86_64-linux.codex-desktop-patch-source \
-            .#checks.x86_64-linux.codex-desktop-computer-use \
+            .#checks.x86_64-linux.chatgpt-desktop-contract \
             --print-build-logs
 
   build:
@@ -71,11 +70,7 @@ jobs:
       matrix:
         package:
           - codex
-          - codex-computer-use-linux
-          - codex-desktop
-          - codex-desktop-computer-use-ui
-          - codex-desktop-remote-mobile-control
-          - codex-desktop-computer-use-ui-remote-mobile-control
+          - chatgpt-desktop
           - oh-my-codex
     steps:
       - name: Checkout repository
@@ -106,16 +101,10 @@ jobs:
             codex)
               "$package_path/bin/codex" --version
               ;;
-            codex-computer-use-linux)
-              test -x "$package_path/bin/codex-computer-use-linux"
-              test -x "$package_path/bin/codex-computer-use-cosmic"
-              test -x "$package_path/bin/codex-chrome-extension-host"
-              "$package_path/bin/codex-computer-use-linux" --help
-              "$package_path/bin/codex-computer-use-cosmic" --help
-              "$package_path/bin/codex-chrome-extension-host" </dev/null
-              ;;
-            codex-desktop|codex-desktop-computer-use-ui|codex-desktop-remote-mobile-control|codex-desktop-computer-use-ui-remote-mobile-control)
+            chatgpt-desktop)
+              test -x "$package_path/bin/chatgpt"
               test -x "$package_path/bin/codex-desktop"
+              test -f "$package_path/share/applications/chatgpt.desktop"
               ;;
             oh-my-codex)
               "$package_path/bin/omx" --version

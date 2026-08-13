@@ -44,9 +44,9 @@ paths outside these allowlists:
 | Target | Update command | Allowed changed paths | Build/smoke scope |
 | --- | --- | --- | --- |
 | `codex` | Codex updater | `packages/codex/hashes.json` | `codex`, `oh-my-codex` |
-| `codex-desktop` | Update `codex-desktop-linux` input | `flake.lock` | Computer Use backend plus all four desktop outputs |
+| `codex-desktop` | Refresh the official OpenAI Linux package pin | `packages/chatgpt-desktop/source.nix` | Official ChatGPT/Codex desktop app and bundled native Computer Use runtime |
 | `oh-my-codex` | OMX updater | OMX `hashes.json` and `Cargo.lock` | `oh-my-codex` |
-| `foundations` | Update `nixpkgs`, `systems`, and `home-manager` inputs | `flake.lock` | all seven public package outputs |
+| `foundations` | Update `nixpkgs`, `systems`, and `home-manager` inputs | `flake.lock` | all public package outputs |
 
 For lock-file targets, the validator compares semantic input graphs rather than
 generated node names. Protected root-input closures must remain identical, the
@@ -59,18 +59,18 @@ Every non-empty update runs, in order:
 3. `nix flake check --all-systems --no-build --print-build-logs`.
 4. Real x86 builds of the module, output, generated Home Manager, formatting,
    actionlint, and workflow-contract checks.
-5. The real patch-source and packaged Computer Use desktop-plugin checks for
-   desktop/foundation changes.
+5. The real official desktop-package contract for desktop/foundation changes.
 6. Target package builds and executable smoke tests. Foundations builds all
-   seven outputs; Codex also builds OMX because the wrapper embeds Codex.
+   primary outputs; Codex also builds OMX because the wrapper embeds Codex.
 
 The `queue: max` key is supported by GitHub Actions but is newer than the
 actionlint 1.7.12 concurrency schema. `.github/actionlint.yaml` suppresses only
 that exact stale-schema diagnostic and only for the four fixed callers; every
 other actionlint diagnostic remains enabled.
 
-The normal `Check` workflow independently evaluates contracts and runs an
-all-seven build matrix on pull requests and pushes to `main`.
+The normal `Check` workflow independently evaluates contracts and runs a build
+matrix for the primary outputs on pull requests and pushes to `main`. Historical
+desktop output names remain aliases and are covered by the output contract.
 
 ## Pull request state machine
 

@@ -25,11 +25,7 @@ CALLERS = {
 
 ALL_PACKAGES = (
     "codex",
-    "codex-computer-use-linux",
-    "codex-desktop",
-    "codex-desktop-computer-use-ui",
-    "codex-desktop-remote-mobile-control",
-    "codex-desktop-computer-use-ui-remote-mobile-control",
+    "chatgpt-desktop",
     "oh-my-codex",
 )
 
@@ -265,7 +261,7 @@ class ReusableWorkflowTests(unittest.TestCase):
     def test_update_commands_are_literal_fixed_mappings(self) -> None:
         commands = {
             "nix develop -c packages/codex/update.py",
-            "nix flake update codex-desktop-linux",
+            "nix develop -c packages/chatgpt-desktop/update.py",
             "nix develop -c packages/oh-my-codex/update.py",
             "nix flake update nixpkgs systems home-manager",
         }
@@ -291,8 +287,8 @@ class ReusableWorkflowTests(unittest.TestCase):
         expected = {
             "codex": (frozenset({"packages/codex/hashes.json"}), frozenset()),
             "codex-desktop": (
-                frozenset({"flake.lock"}),
-                frozenset({"codex-desktop-linux"}),
+                frozenset({"packages/chatgpt-desktop/source.nix"}),
+                frozenset(),
             ),
             "oh-my-codex": (
                 frozenset(
@@ -327,8 +323,7 @@ class ReusableWorkflowTests(unittest.TestCase):
             "formatting",
             "actionlint",
             "workflow-contracts",
-            "codex-desktop-patch-source",
-            "codex-desktop-computer-use",
+            "chatgpt-desktop-contract",
         ):
             self.assertIn(f".#checks.x86_64-linux.{check}", self.text)
         self.assertRegex(
@@ -627,10 +622,7 @@ class CheckWorkflowTests(unittest.TestCase):
     def test_each_package_family_has_a_smoke_assertion(self) -> None:
         fragments = (
             '"$package_path/bin/codex" --version',
-            '"$package_path/bin/codex-computer-use-linux"',
-            '"$package_path/bin/codex-computer-use-linux" --help',
-            '"$package_path/bin/codex-computer-use-cosmic" --help',
-            '"$package_path/bin/codex-chrome-extension-host" </dev/null',
+            '"$package_path/bin/chatgpt"',
             '"$package_path/bin/codex-desktop"',
             '"$package_path/bin/omx" --version',
         )
@@ -647,8 +639,7 @@ class CheckWorkflowTests(unittest.TestCase):
             "formatting",
             "actionlint",
             "workflow-contracts",
-            "codex-desktop-patch-source",
-            "codex-desktop-computer-use",
+            "chatgpt-desktop-contract",
         ):
             self.assertIn(f".#checks.x86_64-linux.{check}", self.text)
 

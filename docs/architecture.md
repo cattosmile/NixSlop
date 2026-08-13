@@ -24,7 +24,7 @@ each have their own ownership boundary.
 | Area | Owned files | Responsibility |
 | --- | --- | --- |
 | Flake assembly | `flake.nix`, `flake.lock` | Inputs and stable public output names |
-| Packages | `packages/` | Package derivations, source pins, desktop variants, updater scripts |
+| Packages | `packages/` | Package derivations, source pins, desktop package, updater scripts |
 | Home Manager | `modules/home-manager/` | Aggregate, program integrations, and user-session services |
 | NixOS | `modules/nixos/` | Optional Computer Use system-service fallback |
 | Checks | `nix/checks.nix`, `tests/` | Output, module, generated-file, updater, and workflow contracts |
@@ -34,29 +34,31 @@ each have their own ownership boundary.
 Package modules may select NixSlop package outputs as defaults, but consumer
 configuration and secrets stay outside this repository. The Home Manager
 modules own user packages, generated files, and user-session services. The
-NixOS module is retained for systems that need a system-level ydotool daemon or
-device/group integration. Codex Desktop's Hyprland adapter changes only the
-virtual ydotool device, not physical keyboard layouts.
+NixOS module is retained only as a legacy fallback for systems that need a
+system-level ydotool daemon or device/group integration. The official ChatGPT
+Desktop package has its own native Linux Computer Use runtime. The legacy
+Hyprland adapter changes only the virtual ydotool device, not physical keyboard
+layouts.
 
 ## Public compatibility boundary
 
 The following are intentionally stable:
 
-- Seven package outputs: `codex`, `codex-computer-use-linux`, `codex-desktop`,
-  the three Codex Desktop feature variants, and `oh-my-codex`.
+- The package outputs `codex`, `chatgpt-desktop`, and `oh-my-codex`.
+- The historical `codex-desktop-*` outputs remain as aliases of
+  `chatgpt-desktop` during the migration.
 - Aggregate Home Manager modules `default` and `nixslop`.
 - Individual Home Manager module names and their historical option paths.
 - NixOS modules `default` and `codexComputerUse`.
-- Codex Desktop override arguments `enableComputerUseUi`, `linuxFeatureIds`,
-  and `linuxFeaturesConfigOverride`.
+- Historical Codex Desktop override arguments are accepted for compatibility,
+  but no longer patch or rebuild the official package.
 - The isolated US mapping for `ydotoold-virtual-device` and its explicit
   Home Manager opt-out.
 
-Named Codex Desktop feature outputs validate their effective upstream patch
-reports. Remote Mobile Control is fail-closed when any selected feature patch
-drifts. The Computer Use UI output permits only the upstream-declared optional
-settings-card availability skip; its required Linux UI, native-app,
-host-platform, and install-flow patches remain fail-closed.
+The desktop contract verifies the pinned official package, its launcher and
+desktop entry, and the bundled native Linux Computer Use helper. Feature
+availability is owned by the official application rather than by NixSlop patch
+reports.
 
 Regression checks evaluate this boundary on every pull request and push to
 `main`. Moving implementation files does not authorize a public rename.
@@ -80,16 +82,16 @@ Codex files:
   skips unavailable runtime marketplaces, and never owns authentication,
   account slots, skills, or existing plugin entries. Native Home Manager Codex
   configuration is left to its declarative plugin options instead.
-- `programs.codexComputerUse` owns the user-space Computer Use runtime: the
+- `programs.codexComputerUse` owns the legacy user-space Computer Use runtime: the
   AT-SPI D-Bus and systemd user units, the ydotool client, the per-user
   `ydotoold` service, and `YDOTOOL_SOCKET`. When the legacy NixOS module is
   present, it reuses that module's system socket instead of starting a second
   daemon.
 - `programs.nixslop` is the consumer-facing setup facade. Its `codex` and
-  `omx` selectors intentionally target the current combined Codex/OMX module;
-  `desktop` and `computerUse` select their corresponding integrations. The
-  historical option paths remain public for advanced configuration and
-  compatibility.
+  `omx` selectors target the current combined Codex/OMX module; `desktop` selects
+  the official ChatGPT Desktop package and `computerUse` explicitly selects the
+  legacy ydotool integration. The historical option paths remain public for
+  advanced configuration and compatibility.
 - `nixosModules.codexComputerUse` remains a compatibility boundary for systems
   that need a system-level `ydotoold` service or NixOS-wide device/group
   integration. It is not required for the normal Home Manager setup.

@@ -327,7 +327,9 @@ let
   aggregateProjection = config: {
     codexDesktopEnabled = config.programs.codexDesktopLinux.enable;
     physicalLayout = config.wayland.windowManager.hyprland.settings.input.kb_layout;
-    virtualDevices = config.wayland.windowManager.hyprland.settings.device;
+    virtualDevices =
+      lib.attrByPath [ "wayland" "windowManager" "hyprland" "settings" "device" ] [ ]
+        config;
   };
 
   generatedFiles = pkgs.runCommand "nixslop-generated-file-contracts" { } ''
@@ -449,15 +451,21 @@ let
     assert lib.hasAttrByPath [ "programs" "nixslop" "omx" "enable" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "nixslop" "desktop" "enable" ] aggregateEval.options;
     assert lib.hasAttrByPath [ "programs" "nixslop" "computerUse" "enable" ] aggregateEval.options;
-    # `homeManagerModules.nixslop` is a public behavioral alias for the
-    # aggregate. Compare evaluated values, never the module functions.
+    # The public alias composes the same modules. Both central entry points
+    # disable the legacy ydotool keymap unless it is explicitly requested.
     assert aggregateProjection aggregateAlias == aggregateProjection aggregate;
+    assert
+      aggregateProjection aggregate == {
+        codexDesktopEnabled = true;
+        physicalLayout = "de";
+        virtualDevices = [ ];
+      };
     assert centralFacade.programs.codexOmx.enable;
     assert centralFacade.programs.codexDesktopLinux.enable;
     assert centralFacade.programs.codexDesktopLinux.computerUseUi.enable;
     assert centralFacade.programs.codexDesktopLinux.remoteMobileControl.enable;
     assert centralFacade.programs.codexComputerUse.enable;
-    assert centralFacade.programs.codexComputerUseHyprland.enable;
+    assert !centralFacade.programs.codexComputerUseHyprland.enable;
     assert omxFacadeOnly.programs.codexOmx.enable;
     assert
       aggregate.programs.codexDesktopLinux.package.outPath
@@ -465,7 +473,8 @@ let
     assert
       aggregate.programs.codexDesktopLinux.cliPackage.outPath == self.packages.${system}.codex.outPath;
     assert aggregate.wayland.windowManager.hyprland.settings.input.kb_layout == "de";
-    assert aggregate.wayland.windowManager.hyprland.settings.device == expectedVirtualDevice;
+    assert
+      lib.attrByPath [ "wayland" "windowManager" "hyprland" "settings" "device" ] [ ] aggregate == [ ];
     assert hyprlandOptOut.wayland.windowManager.hyprland.settings.input.kb_layout == "de";
     assert
       lib.attrByPath [ "wayland" "windowManager" "hyprland" "settings" "device" ] [ ] hyprlandOptOut

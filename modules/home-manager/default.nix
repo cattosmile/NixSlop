@@ -36,12 +36,19 @@ in
 
       hyprland.enable = lib.mkOption {
         type = lib.types.bool;
-        default = true;
-        description = "Configure the Hyprland keymap for the Codex Computer Use virtual device.";
+        default = false;
+        description = ''
+          Configure the legacy Hyprland keymap for the ydotool Computer Use
+          virtual device. The official ChatGPT Desktop app does not need this.
+        '';
       };
     };
 
-    computerUse.enable = lib.mkEnableOption "the Linux Computer Use runtime";
+    computerUse.enable = lib.mkEnableOption ''
+      the legacy ydotool/AT-SPI Linux Computer Use runtime. The official
+      ChatGPT Desktop app bundles its own native Computer Use backend, so this
+      is normally not needed.
+    '';
   };
 
   config = {
@@ -56,6 +63,8 @@ in
     };
 
     programs.codexComputerUse.enable = lib.mkDefault cfg.computerUse.enable;
-    programs.codexComputerUseHyprland.enable = lib.mkDefault cfg.desktop.hyprland.enable;
+    programs.codexComputerUseHyprland.enable = lib.mkDefault (
+      cfg.computerUse.enable && cfg.desktop.hyprland.enable
+    );
   };
 }

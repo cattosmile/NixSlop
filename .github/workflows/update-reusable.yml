@@ -132,7 +132,7 @@ jobs:
               nix develop -c packages/codex/update.py
               ;;
             codex-desktop)
-              nix flake update codex-desktop-linux
+              nix develop -c packages/chatgpt-desktop/update.py
               ;;
             oh-my-codex)
               nix develop -c packages/oh-my-codex/update.py
@@ -182,8 +182,7 @@ jobs:
           (inputs.program == 'codex-desktop' || inputs.program == 'foundations')
         run: |
           nix build --no-link \
-            .#checks.x86_64-linux.codex-desktop-patch-source \
-            .#checks.x86_64-linux.codex-desktop-computer-use \
+            .#checks.x86_64-linux.chatgpt-desktop-contract \
             --print-build-logs
 
       - name: Build and smoke test fixed targets
@@ -200,16 +199,10 @@ jobs:
               codex)
                 "$package_path/bin/codex" --version
                 ;;
-              codex-computer-use-linux)
-                test -x "$package_path/bin/codex-computer-use-linux"
-                test -x "$package_path/bin/codex-computer-use-cosmic"
-                test -x "$package_path/bin/codex-chrome-extension-host"
-                "$package_path/bin/codex-computer-use-linux" --help
-                "$package_path/bin/codex-computer-use-cosmic" --help
-                "$package_path/bin/codex-chrome-extension-host" </dev/null
-                ;;
-              codex-desktop|codex-desktop-computer-use-ui|codex-desktop-remote-mobile-control|codex-desktop-computer-use-ui-remote-mobile-control)
+              chatgpt-desktop)
+                test -x "$package_path/bin/chatgpt"
                 test -x "$package_path/bin/codex-desktop"
+                test -f "$package_path/share/applications/chatgpt.desktop"
                 ;;
               oh-my-codex)
                 "$package_path/bin/omx" --version
@@ -227,13 +220,7 @@ jobs:
               packages=(codex oh-my-codex)
               ;;
             codex-desktop)
-              packages=(
-                codex-computer-use-linux
-                codex-desktop
-                codex-desktop-computer-use-ui
-                codex-desktop-remote-mobile-control
-                codex-desktop-computer-use-ui-remote-mobile-control
-              )
+              packages=(chatgpt-desktop)
               ;;
             oh-my-codex)
               packages=(oh-my-codex)
@@ -241,11 +228,7 @@ jobs:
             foundations)
               packages=(
                 codex
-                codex-computer-use-linux
-                codex-desktop
-                codex-desktop-computer-use-ui
-                codex-desktop-remote-mobile-control
-                codex-desktop-computer-use-ui-remote-mobile-control
+                chatgpt-desktop
                 oh-my-codex
               )
               ;;
@@ -326,7 +309,7 @@ jobs:
               git add -- packages/codex/hashes.json
               ;;
             codex-desktop|foundations)
-              git add -- flake.lock
+              git add -- packages/chatgpt-desktop/source.nix
               ;;
             oh-my-codex)
               git add -- \

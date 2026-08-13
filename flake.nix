@@ -11,7 +11,6 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     systems.url = "github:nix-systems/default-linux";
-    codex-desktop-linux.url = "github:ilysenko/codex-desktop-linux";
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -23,7 +22,6 @@
       self,
       nixpkgs,
       systems,
-      codex-desktop-linux,
       home-manager,
     }:
     let
@@ -39,18 +37,10 @@
       codexComputerUseModule = import ./modules/nixos/codex-computer-use.nix;
     in
     {
-      packages = eachSystem (
-        system:
-        import ./packages {
-          pkgs = pkgsFor system;
-          inherit codex-desktop-linux;
-        }
-      );
+      packages = eachSystem (system: import ./packages { pkgs = pkgsFor system; });
 
       homeManagerModules = {
-        codexDesktop = import ./modules/home-manager/codex-desktop.nix {
-          inherit self codex-desktop-linux;
-        };
+        codexDesktop = import ./modules/home-manager/codex-desktop.nix { inherit self; };
         codexComputerUse = import ./modules/home-manager/codex-computer-use.nix;
         codexComputerUseHyprland = import ./modules/home-manager/codex-computer-use-hyprland.nix;
         codexOmx = import ./modules/home-manager/codex-omx.nix { inherit self; };

@@ -23,8 +23,7 @@ class TargetContract:
 TARGETS: dict[str, TargetContract] = {
     "codex": TargetContract(frozenset({"packages/codex/hashes.json"})),
     "codex-desktop": TargetContract(
-        frozenset({"flake.lock"}),
-        frozenset({"codex-desktop-linux"}),
+        frozenset({"packages/chatgpt-desktop/source.nix"}),
     ),
     "oh-my-codex": TargetContract(
         frozenset(

@@ -8,6 +8,7 @@ let
   packages = self.packages.${system};
   packageNames = builtins.attrNames packages;
   expectedPackageNames = [
+    "chatgpt-desktop"
     "codex"
     "codex-computer-use-linux"
     "codex-desktop"
@@ -40,6 +41,8 @@ assert packageNames == expectedPackageNames;
 assert pkgs.lib.isDerivation computerUseUiOverride;
 assert pkgs.lib.isDerivation remoteMobileControlOverride;
 assert pkgs.lib.isDerivation allArgumentsOverride;
+assert packages.chatgpt-desktop.outPath == packages.codex-desktop.outPath;
+assert packages.chatgpt-desktop.outPath == packages.codex-computer-use-linux.outPath;
 assert computerUseUiOverride.outPath == packages.codex-desktop-computer-use-ui.outPath;
 assert remoteMobileControlOverride.outPath == packages.codex-desktop-remote-mobile-control.outPath;
 assert configOnlyRemoteOverride.outPath == packages.codex-desktop-remote-mobile-control.outPath;
