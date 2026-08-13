@@ -96,12 +96,16 @@ in
           "--socket-perm=0600"
         ];
         Environment = [ "YDOTOOL_SOCKET=${cfg.ydotoold.socket}" ];
-        Restart = "on-failure";
+        # ydotoold can receive a clean SIGTERM when the graphical user target
+        # is refreshed. Restart it in that case as well; otherwise the socket
+        # remains on disk while all keyboard and scroll actions silently lose
+        # their only Wayland fallback.
+        Restart = "always";
         RestartSec = "1s";
         UMask = "0077";
       };
 
-      Install.WantedBy = [ "default.target" ];
+      Install.WantedBy = [ "graphical-session.target" ];
     };
   };
 }

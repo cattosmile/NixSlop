@@ -439,6 +439,9 @@ let
       == codexComputerUse.programs.codexComputerUse.ydotoold.socket;
     assert lib.hasInfix "ydotoold" ydotooldExecStart;
     assert lib.hasInfix "--socket-perm=0600" ydotooldExecStart;
+    assert codexComputerUse.systemd.user.services.ydotoold.Service.Restart == "always";
+    assert lib.elem "graphical-session.target"
+      codexComputerUse.systemd.user.services.ydotoold.Install.WantedBy;
     assert lib.hasInfix "unset NO_AT_BRIDGE" codexComputerUse.home.sessionVariablesExtra;
     assert !legacyCodexComputerUse.programs.codexComputerUse.ydotoold.enable;
     assert legacyCodexComputerUse.programs.codexComputerUse.ydotoold.socket == "/run/ydotoold/socket";

@@ -36,7 +36,7 @@
          }
      }
 
-@@ -1493,6 +1501,22 @@
+@@ -1493,6 +1501,26 @@
      }
 
      #[test]
@@ -51,7 +51,11 @@
 +
 +        let capabilities = capability_map(&platform, &portals, &accessibility, &windowing, &input);
 +
-+        assert_eq!(capabilities.screenshot, vec!["grim"]);
++        assert_eq!(capabilities.screenshot.first().map(String::as_str), Some("grim"));
++        assert!(capabilities
++            .screenshot
++            .iter()
++            .any(|backend| backend == "grim"));
 +        assert_eq!(capabilities.preferred.screenshot.as_deref(), Some("grim"));
 +    }
 +

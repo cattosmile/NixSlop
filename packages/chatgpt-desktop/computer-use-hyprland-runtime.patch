@@ -1,0 +1,222 @@
+--- a/computer-use-linux/src/gnome_extension.rs
++++ b/computer-use-linux/src/gnome_extension.rs
+@@ -1,5 +1,6 @@
+ use crate::diagnostics::hydrate_session_bus_env;
+ use crate::identity;
++use crate::windowing::backends::hyprland::list_windows as list_hyprland_windows;
+ use crate::windowing::backends::gnome::list_extension_windows;
+ use crate::windows::{window_permission_hint, WindowInfo};
+ use schemars::JsonSchema;
+@@ -34,6 +35,9 @@
+ 
+ pub async fn setup_window_targeting_report() -> WindowTargetingSetupReport {
+     hydrate_session_bus_env();
++    if is_hyprland_session() {
++        return native_window_targeting_report().await;
++    }
+ 
+     let extension_dir = extension_dir();
+     let extension_was_enabled = gnome_extension_enabled();
+@@ -95,6 +99,61 @@
+     }
+ }
+ 
++fn is_hyprland_session() -> bool {
++    let current_desktop = env::var("XDG_CURRENT_DESKTOP").ok();
++    let instance_signature = env::var("HYPRLAND_INSTANCE_SIGNATURE").ok();
++    is_hyprland_session_values(current_desktop.as_deref(), instance_signature.as_deref())
++}
++
++fn is_hyprland_session_values(
++    current_desktop: Option<&str>,
++    instance_signature: Option<&str>,
++) -> bool {
++    current_desktop.is_some_and(|desktop| {
++        desktop
++            .split(':')
++            .any(|value| value.trim().eq_ignore_ascii_case("hyprland"))
++    }) || instance_signature.is_some_and(|signature| !signature.trim().is_empty())
++}
++
++async fn native_window_targeting_report() -> WindowTargetingSetupReport {
++    let (windows, windows_error, permissions_hint) = match list_hyprland_windows().await {
++        Ok(windows) => (windows, None, None),
++        Err(error) => {
++            let error = format!("{error:#}");
++            let hint = window_permission_hint(&error);
++            (Vec::new(), Some(error), hint)
++        }
++    };
++    let (ok, detail, message) = match windows_error.as_deref() {
++        None => (
++            true,
++            "Hyprland hyprctl window backend is active; the GNOME Shell extension is not required."
++                .to_string(),
++            "Hyprland native window targeting is active; no GNOME Shell extension is required."
++                .to_string(),
++        ),
++        Some(error) => (
++            false,
++            format!("Hyprland hyprctl window backend unavailable: {error}"),
++            format!(
++                "Hyprland was detected, but native window targeting is unavailable: {error}"
++            ),
++        ),
++    };
++
++    WindowTargetingSetupReport {
++        extension_dir: "not applicable (Hyprland native backend)".to_string(),
++        wrote_files: false,
++        enable_command: SetupCommandReport { ok, detail },
++        windows,
++        windows_error,
++        permissions_hint,
++        requires_shell_reload: false,
++        message,
++    }
++}
++
+ struct ExtensionWriteReport {
+     wrote_files: bool,
+     changed_files: bool,
+@@ -332,6 +391,15 @@
+     use super::*;
+ 
+     #[test]
++    fn recognizes_hyprland_from_desktop_or_instance_environment() {
++        assert!(is_hyprland_session_values(Some("Hyprland"), None));
++        assert!(is_hyprland_session_values(Some("Hyprland:wayland"), None));
++        assert!(is_hyprland_session_values(None, Some("instance")));
++        assert!(!is_hyprland_session_values(Some("GNOME"), None));
++        assert!(!is_hyprland_session_values(None, Some("  ")));
++    }
++
++    #[test]
+     fn enabled_extensions_literal_adds_uuid_to_existing_list() {
+         assert_eq!(
+             enabled_extensions_literal("['ubuntu-dock@ubuntu.com']").unwrap(),
+--- a/computer-use-linux/src/windowing/backends/hyprland.rs
++++ b/computer-use-linux/src/windowing/backends/hyprland.rs
+@@ -205,6 +205,39 @@
+             [(right - left) as u32, (bottom - top) as u32],
+         ))
+     }
++
++    fn capture_point_to_hyprland(&self, point: [i32; 2]) -> Result<[i32; 2]> {
++        Ok([
++            self.capture_coordinate_to_hyprland(point[0], self.origin_x)?,
++            self.capture_coordinate_to_hyprland(point[1], self.origin_y)?,
++        ])
++    }
++
++    fn capture_size_to_hyprland(&self, size: [u32; 2]) -> Result<[i32; 2]> {
++        Ok([
++            self.capture_extent_to_hyprland(size[0])?,
++            self.capture_extent_to_hyprland(size[1])?,
++        ])
++    }
++
++    fn capture_coordinate_to_hyprland(&self, value: i32, origin: i32) -> Result<i32> {
++        let mapped = f64::from(value) / self.scale + f64::from(origin);
++        if !mapped.is_finite()
++            || mapped < f64::from(i32::MIN)
++            || mapped > f64::from(i32::MAX)
++        {
++            bail!("capture coordinate {value} cannot be mapped to Hyprland coordinates");
++        }
++        Ok(mapped.round() as i32)
++    }
++
++    fn capture_extent_to_hyprland(&self, value: u32) -> Result<i32> {
++        let mapped = f64::from(value) / self.scale;
++        if !mapped.is_finite() || mapped < 1.0 || mapped > f64::from(i32::MAX) {
++            bail!("capture extent {value} cannot be mapped to a positive Hyprland size");
++        }
++        Ok(mapped.round().max(1.0) as i32)
++    }
+ }
+ 
+ fn windows_from_hyprland_clients(clients: Vec<HyprlandClient>) -> Result<Vec<WindowInfo>> {
+@@ -243,18 +276,50 @@
+ }
+ 
+ pub async fn move_window(window_id: u64, x: i32, y: i32) -> Result<String> {
++    let requested = [x, y];
++    let layout = capture_layout().await?;
++    let [x, y] = layout.capture_point_to_hyprland(requested)?;
+     dispatch_window_pixel("move", "movewindowpixel", x, y, window_id)
+         .await
+-        .map(|()| format!("Hyprland moved window 0x{window_id:x} to {x},{y}."))
++        .map(|()| {
++            format!(
++                "Hyprland moved window 0x{window_id:x} to capture position {},{} (compositor position {x},{y}).",
++                requested[0], requested[1]
++            )
++        })
+ }
+ 
+ pub async fn resize_window(window_id: u64, width: i32, height: i32) -> Result<String> {
+     if width <= 0 || height <= 0 {
+         bail!("Hyprland window size must be positive, got {width}x{height}");
+     }
++    let requested = [width as u32, height as u32];
++    let layout = capture_layout().await?;
++    let [width, height] = layout.capture_size_to_hyprland(requested)?;
+     dispatch_window_pixel("resize", "resizewindowpixel", width, height, window_id)
+         .await
+-        .map(|()| format!("Hyprland resized window 0x{window_id:x} to {width}x{height}."))
++        .map(|()| {
++            format!(
++                "Hyprland resized window 0x{window_id:x} to capture size {}x{} (compositor size {width}x{height}).",
++                requested[0], requested[1]
++            )
++        })
++}
++
++async fn capture_layout() -> Result<HyprlandCaptureLayout> {
++    let output = hyprctl_output_async(&["monitors", "-j"])
++        .await
++        .context("failed to run hyprctl monitors -j for coordinate conversion")?;
++    if !output.status.success() {
++        bail!(
++            "hyprctl monitors -j failed: {}",
++            String::from_utf8_lossy(&output.stderr).trim()
++        );
++    }
++    let monitors: Vec<HyprlandMonitor> = serde_json::from_slice(&output.stdout)
++        .context("failed to parse hyprctl monitors -j for coordinate conversion")?;
++    HyprlandCaptureLayout::from_monitors(&monitors)
++        .ok_or_else(|| anyhow::anyhow!("Hyprland monitor metadata has no usable scale"))
+ }
+ 
+ async fn dispatch_window_pixel(
+@@ -496,6 +561,29 @@
+     }
+ 
+     #[test]
++    fn maps_capture_geometry_back_to_hyprland_coordinates() {
++        let layout = HyprlandCaptureLayout::from_monitors(&[
++            HyprlandMonitor {
++                id: 0,
++                x: 0,
++                y: 0,
++                scale: 1.5,
++            },
++            HyprlandMonitor {
++                id: 1,
++                x: -1080,
++                y: 0,
++                scale: 1.0,
++            },
++        ])
++        .unwrap();
++
++        assert_eq!(layout.capture_point_to_hyprland([1653, 33]).unwrap(), [22, 22]);
++        assert_eq!(layout.capture_point_to_hyprland([0, 0]).unwrap(), [-1080, 0]);
++        assert_eq!(layout.capture_size_to_hyprland([3716, 2094]).unwrap(), [2477, 1396]);
++    }
++
++    #[test]
+     fn bounds_are_omitted_without_valid_monitor_metadata() {
+         let clients = r#"[{
+             "address":"0x1234",

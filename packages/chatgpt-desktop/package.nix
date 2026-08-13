@@ -194,7 +194,10 @@ let
   computerUseSource =
     runCommandLocal "nixslop-codex-computer-use-source"
       {
-        nativeBuildInputs = [ patch ];
+        nativeBuildInputs = [
+          git
+          patch
+        ];
       }
       ''
         mkdir -p "$out"
@@ -208,15 +211,20 @@ let
         chmod -R u+w "$out"
 
         patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use.patch}
+        git -C "$out" apply --check --whitespace=nowarn ${./computer-use-hyprland-runtime.patch}
+        git -C "$out" apply --whitespace=nowarn ${./computer-use-hyprland-runtime.patch}
         patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use-grim.patch}
         patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use-diagnostics-grim.patch}
 
         registry="$out/computer-use-linux/src/windowing/registry.rs"
         hyprland="$out/computer-use-linux/src/windowing/backends/hyprland.rs"
+        gnome_extension="$out/computer-use-linux/src/gnome_extension.rs"
         screenshot="$out/computer-use-linux/src/screenshot.rs"
         grep -Fq 'HYPRLAND_BACKEND => hyprland::move_window' "$registry"
         grep -Fq 'HYPRLAND_BACKEND => hyprland::resize_window' "$registry"
         grep -Fq 'hl.dsp.window.{dispatcher}' "$hyprland"
+        grep -Fq 'capture_point_to_hyprland' "$hyprland"
+        grep -Fq 'Hyprland native window targeting is active' "$gnome_extension"
         grep -Fq 'capture_with_grim' "$screenshot"
         grep -Fq 'Self::Grim' "$screenshot"
         test "$(sed -n '/const BACKEND_ORDER/,/];/p' "$registry" | grep -n 'BackendKind::' | head -n 1 | cut -d: -f2-)" = \
