@@ -50,6 +50,14 @@ variant is enabled, the Home Manager activation also registers the local
 the immutable package alone only makes that plugin available in the bundled
 marketplace.
 
+The runtime reports this coordinate contract through `doctor`, including the
+logical origin, monitor count, capture scale, and Grim/Hyprland readiness.
+Move/resize requests reread the live monitor layout and retry one stale window
+handle only after a unique PID or window-identity match. Ambiguous stale
+handles are rejected. The screenshot backend prefers Grim only on Wayland, so
+X11 sessions retain their native fallback path. These invariants are covered by
+the source contract and focused Rust library checks in the flake.
+
 ## Public compatibility boundary
 
 The following are intentionally stable:

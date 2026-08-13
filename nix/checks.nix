@@ -15,6 +15,20 @@ let
   codex = self.packages.${system}.codex;
   chatgptDesktop = self.packages.${system}.chatgpt-desktop;
   chatgptDesktopComputerUse = self.packages.${system}.codex-desktop-computer-use-ui;
+  chatgptDesktopComputerUseRustTests =
+    chatgptDesktopComputerUse.computerUseBinaries.overrideAttrs
+      (_: {
+        doCheck = true;
+        cargoTestFlags = [
+          "-p"
+          "codex-computer-use-linux"
+          "--lib"
+        ];
+        installPhase = ''
+          mkdir -p "$out"
+          touch "$out/passed"
+        '';
+      });
 
   assertionCheck =
     name: condition:
@@ -95,8 +109,13 @@ in
         grep -Fq 'BackendKind::Hyprland,' "$source/computer-use-linux/src/windowing/registry.rs"
         grep -Fq 'HYPRLAND_BACKEND => hyprland::move_window' "$source/computer-use-linux/src/windowing/registry.rs"
         grep -Fq 'capture_with_grim' "$source/computer-use-linux/src/screenshot.rs"
+        grep -Fq 'pub coordinates: CoordinateReport' "$source/computer-use-linux/src/diagnostics.rs"
+        grep -Fq 'dispatch_window_pixel_with_recovery' "$source/computer-use-linux/src/windowing/backends/hyprland.rs"
+        grep -Fq 'only_prefers_grim_for_wayland_sessions' "$source/computer-use-linux/src/screenshot.rs"
         touch "$out"
       '';
+
+  chatgpt-desktop-computer-use-rust-tests = chatgptDesktopComputerUseRustTests;
 }
 // lib.optionalAttrs (builtins.pathExists ../.github/workflows) {
   actionlint =

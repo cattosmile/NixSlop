@@ -53,6 +53,16 @@ monitor resolutions, fractional scaling, negative monitor origins, or rotated
 outputs. The image is intentionally logical-sized; it avoids requiring the
 agent to apply a monitor-specific 1.5x conversion.
 
+The `doctor` result exposes the coordinate contract explicitly on Hyprland: it
+reports whether `hyprctl monitors -j` and Grim are ready, the logical desktop
+origin, monitor count, and capture scale. Geometry operations reread monitor
+metadata for every request, so monitor changes and output reconfiguration do
+not leave a stale conversion factor behind. If a window ID becomes stale, a
+move or resize retries once only when the replacement can be identified
+uniquely by PID/window identity; ambiguous matches fail safely instead of
+moving the wrong window. Grim is preferred for Wayland sessions, while native
+X11 sessions keep their existing screenshot fallback.
+
 `programs.nixslop.omx.enable = true` is an equivalent selector for the current
 combined Codex/oh-my-codex integration; normally use one of `codex.enable` or
 `omx.enable`. Do not enable Home Manager's native `programs.codex` module
@@ -70,6 +80,12 @@ workflow reads OpenAI's package index and refreshes only that source pin.
 The historical module paths remain available for advanced configuration:
 `programs.codexDesktopLinux`, `programs.codexComputerUse`,
 `programs.codexOmx`, and `programs.codexComputerUseHyprland`.
+
+For a repeatable post-rebuild acceptance test, use the prompt in
+[`docs/computer-use-test-prompt.md`](docs/computer-use-test-prompt.md). It
+covers the 18 tools, the coordinate contract, stale-window recovery, precision,
+and multi-monitor switching while requiring the test agent to restore the
+desktop state.
 
 ## NixOS integration
 

@@ -217,6 +217,8 @@ let
         git -C "$out" apply --whitespace=nowarn ${./computer-use-hyprland-logical-capture.patch}
         patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use-grim.patch}
         patch --batch --fuzz=0 -d "$out" -p1 < ${./computer-use-diagnostics-grim.patch}
+        git -C "$out" apply --unidiff-zero --recount --check --whitespace=nowarn ${./computer-use-hyprland-hardening.patch}
+        git -C "$out" apply --unidiff-zero --recount --whitespace=nowarn ${./computer-use-hyprland-hardening.patch}
 
         registry="$out/computer-use-linux/src/windowing/registry.rs"
         hyprland="$out/computer-use-linux/src/windowing/backends/hyprland.rs"
@@ -230,6 +232,9 @@ let
         grep -Fq 'capture_with_grim' "$screenshot"
         grep -Fq '.args(["-s", "1", "-t", "png", filename])' "$screenshot"
         grep -Fq 'Self::Grim' "$screenshot"
+        grep -Fq 'pub coordinates: CoordinateReport' "$out/computer-use-linux/src/diagnostics.rs"
+        grep -Fq 'dispatch_window_pixel_with_recovery' "$hyprland"
+        grep -Fq 'only_prefers_grim_for_wayland_sessions' "$screenshot"
         test "$(sed -n '/const BACKEND_ORDER/,/];/p' "$registry" | grep -n 'BackendKind::' | head -n 1 | cut -d: -f2-)" = \
           '    BackendKind::Hyprland,'
       '';

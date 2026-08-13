@@ -1,0 +1,502 @@
+diff --git a/computer-use-linux/src/diagnostics.rs b/computer-use-linux/src/diagnostics.rs
+index cc37d04..b086d63 100644
+--- a/computer-use-linux/src/diagnostics.rs
++++ b/computer-use-linux/src/diagnostics.rs
+@@ -84,0 +85,2 @@ pub struct DoctorReport {
++    /// Live Hyprland coordinate contract used by screenshots and window geometry.
++    pub coordinates: CoordinateReport,
+@@ -126,0 +129,14 @@ pub struct PlatformReport {
++#[derive(Debug, Clone, Serialize, JsonSchema)]
++pub struct CoordinateReport {
++    /// False outside Hyprland; the report is informational in other sessions.
++    pub applicable: bool,
++    /// True when Hyprland monitor metadata and the configured Grim contract agree.
++    pub ready: bool,
++    pub compositor: Check,
++    pub screenshot: Check,
++    pub monitor_count: Option<usize>,
++    pub origin: Option<[i32; 2]>,
++    pub capture_scale: Option<f64>,
++    pub note: String,
++}
++
+@@ -241,0 +258 @@ pub fn doctor_report() -> DoctorReport {
++    let coordinates = coordinate_report(&platform);
+@@ -250,0 +268 @@ pub fn doctor_report() -> DoctorReport {
++        coordinates,
+@@ -695,0 +714,63 @@ fn platform_report() -> PlatformReport {
++fn coordinate_report(platform: &PlatformReport) -> CoordinateReport {
++    if !is_hyprland_platform(platform) {
++        return CoordinateReport {
++            applicable: false,
++            ready: true,
++            compositor: Check::ok("not applicable outside Hyprland"),
++            screenshot: Check::ok("not applicable outside Hyprland"),
++            monitor_count: None,
++            origin: None,
++            capture_scale: None,
++            note: "Hyprland coordinate diagnostics are only enabled for a Hyprland session."
++                .to_string(),
++        };
++    }
++
++    let contract = crate::windowing::backends::hyprland::capture_coordinate_contract();
++    let (compositor, monitor_count, origin, capture_scale) = match contract {
++        Ok(contract) => (
++            Check::ok(format!(
++                "hyprctl monitors -j: {} monitor(s), logical origin {},{}, capture scale {:.1}",
++                contract.monitor_count,
++                contract.origin[0],
++                contract.origin[1],
++                contract.scale
++            )),
++            Some(contract.monitor_count),
++            Some(contract.origin),
++            Some(contract.scale),
++        ),
++        Err(error) => (
++            Check::fail(format!("Hyprland monitor metadata unavailable: {error:#}")),
++            None,
++            None,
++            None,
++        ),
++    };
++    let screenshot = if platform.grim.ok {
++        Check::ok("Grim is available; NixSlop captures with grim -s 1 in logical pixels")
++    } else {
++        Check::fail(format!(
++            "Grim is required for the Hyprland logical coordinate contract: {}",
++            platform.grim.detail
++        ))
++    };
++    let ready = compositor.ok && screenshot.ok;
++    let note = if ready {
++        "Screenshots, Hyprland window bounds, move/resize geometry, and pointer coordinates use one logical desktop-pixel space. Monitor metadata is re-read for every window geometry operation, and stale window handles are refreshed by identity before retrying."
++    } else {
++        "The Hyprland coordinate contract is incomplete; inspect compositor and screenshot details before relying on pixel-targeted actions."
++    };
++
++    CoordinateReport {
++        applicable: true,
++        ready,
++        compositor,
++        screenshot,
++        monitor_count,
++        origin,
++        capture_scale,
++        note: note.to_string(),
++    }
++}
++
+@@ -1020,0 +1102,14 @@ fn platform_is_wayland(platform: &PlatformReport) -> bool {
++fn is_hyprland_platform(platform: &PlatformReport) -> bool {
++    platform
++        .xdg_current_desktop
++        .as_deref()
++        .is_some_and(is_hyprland_desktop)
++        || env_var("HYPRLAND_INSTANCE_SIGNATURE").is_some()
++}
++
++fn is_hyprland_desktop(desktop: &str) -> bool {
++    desktop
++        .split(':')
++        .any(|value| value.trim().eq_ignore_ascii_case("hyprland"))
++}
++
+@@ -2157,0 +2253,10 @@ mod tests {
++    #[test]
++    fn recognizes_hyprland_desktop_tokens() {
++        let mut platform = platform_report();
++        platform.xdg_current_desktop = Some("Hyprland:wayland".to_string());
++        assert!(is_hyprland_desktop(platform.xdg_current_desktop.as_deref().unwrap()));
++
++        platform.xdg_current_desktop = Some("GNOME".to_string());
++        assert!(!is_hyprland_desktop(platform.xdg_current_desktop.as_deref().unwrap()));
++    }
++
+diff --git a/computer-use-linux/src/screenshot.rs b/computer-use-linux/src/screenshot.rs
+index 7acbf5f..1cab2c9 100644
+--- a/computer-use-linux/src/screenshot.rs
++++ b/computer-use-linux/src/screenshot.rs
+@@ -194,6 +194,11 @@ pub async fn capture_screenshot_raw() -> Result<RawScreenshotCapture> {
+-    // setup. Try it first so screenshots do not depend on GNOME Shell, portal
+-    // policy, or an unrelated desktop integration. The remaining backends are
+-    // retained as compatibility fallbacks for other Linux sessions.
+-    let grim_error = match capture_with_grim().await {
+-        Ok(capture) => return Ok(capture),
+-        Err(error) => error,
++    // setup. Try it first on Wayland so screenshots do not depend on GNOME
++    // Shell, portal policy, or an unrelated desktop integration. Avoid
++    // spawning it on native X11 sessions; the remaining backends are retained
++    // as compatibility fallbacks for those sessions.
++    let grim_error = if is_wayland_session() {
++        match capture_with_grim().await {
++            Ok(capture) => return Ok(capture),
++            Err(error) => error,
++        }
++    } else {
++        anyhow!("skipped Grim because the session is not Wayland")
+@@ -233,0 +239,14 @@ pub async fn capture_screenshot_raw() -> Result<RawScreenshotCapture> {
++fn is_wayland_session() -> bool {
++    session_is_wayland(
++        std::env::var("XDG_SESSION_TYPE").ok().as_deref(),
++        std::env::var("WAYLAND_DISPLAY").ok().as_deref(),
++    )
++}
++
++fn session_is_wayland(session_type: Option<&str>, wayland_display: Option<&str>) -> bool {
++    match session_type.map(str::trim).filter(|value| !value.is_empty()) {
++        Some(value) => value.eq_ignore_ascii_case("wayland"),
++        None => wayland_display.is_some_and(|value| !value.trim().is_empty()),
++    }
++}
++
+@@ -861,0 +881,8 @@ mod tests {
++    #[test]
++    fn only_prefers_grim_for_wayland_sessions() {
++        assert!(session_is_wayland(Some("wayland"), Some("wayland-1")));
++        assert!(session_is_wayland(None, Some("wayland-1")));
++        assert!(!session_is_wayland(Some("x11"), Some("wayland-1")));
++        assert!(!session_is_wayland(Some("x11"), None));
++    }
++
+diff --git a/computer-use-linux/src/server.rs b/computer-use-linux/src/server.rs
+index ed34566..bb6eb3f 100644
+--- a/computer-use-linux/src/server.rs
++++ b/computer-use-linux/src/server.rs
+@@ -1881 +1881 @@ impl ComputerUseLinux {
+-        description = "Move a window to a new desktop position (frame top-left in desktop coordinates). Useful to recover windows that are partially off-screen. Works through the Codex GNOME Shell extension or a generic X11/EWMH window manager (wmctrl).",
++        description = "Move a window to a new desktop position (frame top-left in logical desktop coordinates). Useful to recover windows that are partially off-screen. Works through the native Hyprland backend, the Codex GNOME Shell extension, or a generic X11/EWMH window manager (wmctrl). Hyprland refreshes stale window handles by PID/app identity before retrying.",
+@@ -1903 +1903 @@ impl ComputerUseLinux {
+-        description = "Resize a window to a new frame width/height in desktop pixels, unmaximizing it first if needed. Useful to fit a window fully on-screen. Works through the Codex GNOME Shell extension or a generic X11/EWMH window manager (wmctrl).",
++        description = "Resize a window to a new frame width/height in logical desktop pixels, unmaximizing it first if needed. Useful to fit a window fully on-screen. Works through the native Hyprland backend, the Codex GNOME Shell extension, or a generic X11/EWMH window manager (wmctrl). Hyprland refreshes stale window handles by PID/app identity before retrying.",
+diff --git a/computer-use-linux/src/windowing/backends/hyprland.rs b/computer-use-linux/src/windowing/backends/hyprland.rs
+index 9850909..3aa2e5f 100644
+--- a/computer-use-linux/src/windowing/backends/hyprland.rs
++++ b/computer-use-linux/src/windowing/backends/hyprland.rs
+@@ -243,0 +244,43 @@ impl HyprlandCaptureLayout {
++#[derive(Debug, Clone, Copy)]
++pub(crate) struct CaptureCoordinateContract {
++    pub(crate) monitor_count: usize,
++    pub(crate) origin: [i32; 2],
++    pub(crate) scale: f64,
++}
++
++impl CaptureCoordinateContract {
++    fn layout(self) -> HyprlandCaptureLayout {
++        HyprlandCaptureLayout {
++            origin_x: self.origin[0],
++            origin_y: self.origin[1],
++            scale: self.scale,
++        }
++    }
++}
++
++fn capture_coordinate_contract_from_json(
++    monitors_json: &[u8],
++) -> Result<CaptureCoordinateContract> {
++    let monitors: Vec<HyprlandMonitor> = serde_json::from_slice(monitors_json)
++        .context("failed to parse hyprctl monitors -j for coordinate conversion")?;
++    let layout = HyprlandCaptureLayout::from_monitors(&monitors)
++        .ok_or_else(|| anyhow::anyhow!("Hyprland monitor metadata has no usable scale"))?;
++    Ok(CaptureCoordinateContract {
++        monitor_count: monitors.len(),
++        origin: [layout.origin_x, layout.origin_y],
++        scale: layout.scale,
++    })
++}
++
++pub(crate) fn capture_coordinate_contract() -> Result<CaptureCoordinateContract> {
++    let output = hyprctl_output(&["monitors", "-j"])
++        .context("failed to run hyprctl monitors -j for coordinate diagnostics")?;
++    if !output.status.success() {
++        bail!(
++            "hyprctl monitors -j failed: {}",
++            String::from_utf8_lossy(&output.stderr).trim()
++        );
++    }
++    capture_coordinate_contract_from_json(&output.stdout)
++}
++
+@@ -279 +322 @@ pub async fn activate_window(window_id: u64) -> Result<()> {
+-pub async fn move_window(window_id: u64, x: i32, y: i32) -> Result<String> {
++pub async fn move_window(window: &WindowInfo, x: i32, y: i32) -> Result<String> {
+@@ -283,8 +326,12 @@ pub async fn move_window(window_id: u64, x: i32, y: i32) -> Result<String> {
+-    dispatch_window_pixel("move", "movewindowpixel", x, y, window_id)
+-        .await
+-        .map(|()| {
+-            format!(
+-                "Hyprland moved window 0x{window_id:x} to capture position {},{} (compositor position {x},{y}).",
+-                requested[0], requested[1]
+-            )
+-        })
++    let (window_id, recovered) =
++        dispatch_window_pixel_with_recovery("move", "movewindowpixel", x, y, window).await?;
++    Ok(format_window_geometry_result(
++        "moved",
++        window,
++        window_id,
++        recovered,
++        format!(
++            "capture position {},{} (compositor position {x},{y})",
++            requested[0], requested[1]
++        ),
++    ))
+@@ -293 +340 @@ pub async fn move_window(window_id: u64, x: i32, y: i32) -> Result<String> {
+-pub async fn resize_window(window_id: u64, width: i32, height: i32) -> Result<String> {
++pub async fn resize_window(window: &WindowInfo, width: i32, height: i32) -> Result<String> {
+@@ -300,8 +347,18 @@ pub async fn resize_window(window_id: u64, width: i32, height: i32) -> Result<St
+-    dispatch_window_pixel("resize", "resizewindowpixel", width, height, window_id)
+-        .await
+-        .map(|()| {
+-            format!(
+-                "Hyprland resized window 0x{window_id:x} to capture size {}x{} (compositor size {width}x{height}).",
+-                requested[0], requested[1]
+-            )
+-        })
++    let (window_id, recovered) = dispatch_window_pixel_with_recovery(
++        "resize",
++        "resizewindowpixel",
++        width,
++        height,
++        window,
++    )
++    .await?;
++    Ok(format_window_geometry_result(
++        "resized",
++        window,
++        window_id,
++        recovered,
++        format!(
++            "capture size {}x{} (compositor size {width}x{height})",
++            requested[0], requested[1]
++        ),
++    ))
+@@ -320,4 +377,129 @@ async fn capture_layout() -> Result<HyprlandCaptureLayout> {
+-    let monitors: Vec<HyprlandMonitor> = serde_json::from_slice(&output.stdout)
+-        .context("failed to parse hyprctl monitors -j for coordinate conversion")?;
+-    HyprlandCaptureLayout::from_monitors(&monitors)
+-        .ok_or_else(|| anyhow::anyhow!("Hyprland monitor metadata has no usable scale"))
++    Ok(capture_coordinate_contract_from_json(&output.stdout)?.layout())
++}
++
++fn format_window_geometry_result(
++    action: &str,
++    requested_window: &WindowInfo,
++    window_id: u64,
++    recovered: bool,
++    geometry: String,
++) -> String {
++    let recovery_note = if recovered {
++        format!(
++            " Recovered stale window handle 0x{:x} as 0x{window_id:x}",
++            requested_window.window_id
++        )
++    } else {
++        String::new()
++    };
++    format!("Hyprland {action} window 0x{window_id:x} to {geometry}{recovery_note}.")
++}
++
++async fn dispatch_window_pixel_with_recovery(
++    lua_dispatcher: &str,
++    legacy_dispatcher: &str,
++    x: i32,
++    y: i32,
++    requested_window: &WindowInfo,
++) -> Result<(u64, bool)> {
++    match dispatch_window_pixel(
++        lua_dispatcher,
++        legacy_dispatcher,
++        x,
++        y,
++        requested_window.window_id,
++    )
++    .await
++    {
++        Ok(()) => Ok((requested_window.window_id, false)),
++        Err(first_error) => {
++            let windows = list_windows()
++                .await
++                .context("Hyprland refreshed its window list after a stale window handle")?;
++            let Some(replacement) = select_replacement_window(requested_window, &windows) else {
++                return Err(first_error.context(format!(
++                    "Hyprland {lua_dispatcher} failed for stale window 0x{:x}; no unique replacement window was found",
++                    requested_window.window_id
++                )));
++            };
++            dispatch_window_pixel(
++                lua_dispatcher,
++                legacy_dispatcher,
++                x,
++                y,
++                replacement.window_id,
++            )
++            .await
++            .with_context(|| {
++                format!(
++                    "Hyprland {lua_dispatcher} also failed after refreshing stale window 0x{:x} as 0x{:x}",
++                    requested_window.window_id, replacement.window_id
++                )
++            })?;
++            Ok((replacement.window_id, true))
++        }
++    }
++}
++
++fn select_replacement_window(
++    requested: &WindowInfo,
++    candidates: &[WindowInfo],
++) -> Option<WindowInfo> {
++    let candidates = candidates
++        .iter()
++        .filter(|candidate| candidate.window_id != requested.window_id)
++        .collect::<Vec<_>>();
++
++    if let Some(pid) = requested.pid {
++        let mut identity_matches = candidates
++            .iter()
++            .copied()
++            .filter(|candidate| candidate.pid == Some(pid))
++            .filter(|candidate| same_requested_identity(requested, candidate))
++            .collect::<Vec<_>>();
++        if identity_matches.len() > 1 {
++            identity_matches.retain(|candidate| requested.title == candidate.title);
++        }
++        if identity_matches.len() == 1 {
++            return Some(identity_matches[0].clone());
++        }
++    }
++
++    let has_identity = requested
++        .app_id
++        .as_deref()
++        .is_some_and(|value| !value.trim().is_empty())
++        || requested
++            .wm_class
++            .as_deref()
++            .is_some_and(|value| !value.trim().is_empty());
++    if !has_identity {
++        return None;
++    }
++
++    let mut exact_matches = candidates
++        .iter()
++        .copied()
++        .filter(|candidate| same_requested_identity(requested, candidate))
++        .filter(|candidate| requested.title == candidate.title)
++        .collect::<Vec<_>>();
++    if exact_matches.len() == 1 {
++        return Some(exact_matches.remove(0).clone());
++    }
++
++    None
++}
++
++fn same_requested_identity(requested: &WindowInfo, candidate: &WindowInfo) -> bool {
++    requested
++        .app_id
++        .as_deref()
++        .is_none_or(|app_id| {
++            app_id.trim().is_empty() || candidate.app_id.as_deref() == Some(app_id)
++        })
++        && requested
++            .wm_class
++            .as_deref()
++            .is_none_or(|wm_class| {
++                wm_class.trim().is_empty() || candidate.wm_class.as_deref() == Some(wm_class)
++            })
+@@ -502,0 +685,22 @@ mod tests {
++    fn test_window(
++        window_id: u64,
++        pid: Option<u32>,
++        app_id: Option<&str>,
++        title: Option<&str>,
++    ) -> WindowInfo {
++        WindowInfo {
++            window_id,
++            title: title.map(str::to_string),
++            app_id: app_id.map(str::to_string),
++            wm_class: app_id.map(str::to_string),
++            pid,
++            bounds: None,
++            workspace: None,
++            focused: false,
++            hidden: false,
++            client_type: Some("wayland".to_string()),
++            backend: HYPRLAND_BACKEND.to_string(),
++            terminal: None,
++        }
++    }
++
+@@ -586,0 +791,60 @@ mod tests {
++    #[test]
++    fn reports_the_logical_capture_contract_for_mixed_outputs() {
++        let contract = capture_coordinate_contract_from_json(
++            br#"[
++                {"id":0,"x":0,"y":0,"scale":1.5},
++                {"id":1,"x":-1080,"y":0,"scale":1.0}
++            ]"#,
++        )
++        .unwrap();
++
++        assert_eq!(contract.monitor_count, 2);
++        assert_eq!(contract.origin, [-1080, 0]);
++        assert_eq!(contract.scale, 1.0);
++    }
++
++    #[test]
++    fn recovers_a_stale_window_handle_by_pid_and_app_identity() {
++        let requested = test_window(0x1111, Some(4242), Some("kitty"), Some("old title"));
++        let replacement = test_window(0x2222, Some(4242), Some("kitty"), Some("new title"));
++
++        let selected = select_replacement_window(&requested, &[replacement]).unwrap();
++
++        assert_eq!(selected.window_id, 0x2222);
++    }
++
++    #[test]
++    fn refuses_to_guess_between_ambiguous_replacement_windows() {
++        let requested = test_window(0x1111, Some(4242), Some("kitty"), Some("old title"));
++        let first = test_window(0x2222, Some(4242), Some("kitty"), Some("first"));
++        let second = test_window(0x3333, Some(4242), Some("kitty"), Some("second"));
++
++        assert!(select_replacement_window(&requested, &[first, second]).is_none());
++    }
++
++    #[test]
++    fn recovers_without_pid_only_for_an_exact_identity_match() {
++        let requested = test_window(0x1111, None, Some("org.example.App"), Some("App"));
++        let replacement = test_window(0x2222, None, Some("org.example.App"), Some("App"));
++
++        let selected = select_replacement_window(&requested, &[replacement]).unwrap();
++
++        assert_eq!(selected.window_id, 0x2222);
++    }
++
++    #[test]
++    fn reports_when_geometry_used_a_recovered_window_handle() {
++        let requested = test_window(0x1111, Some(4242), Some("kitty"), Some("old title"));
++
++        let result = format_window_geometry_result(
++            "moved",
++            &requested,
++            0x2222,
++            true,
++            "capture position 10,20 (compositor position 10,20)".to_string(),
++        );
++
++        assert!(result.contains("Recovered stale window handle 0x1111 as 0x2222"));
++        assert!(result.ends_with('.'));
++    }
++
+diff --git a/computer-use-linux/src/windowing/registry.rs b/computer-use-linux/src/windowing/registry.rs
+index 9aaa9b8..adb7fe2 100644
+--- a/computer-use-linux/src/windowing/registry.rs
++++ b/computer-use-linux/src/windowing/registry.rs
+@@ -253 +253 @@ pub async fn move_window(window: &WindowInfo, x: i32, y: i32) -> Result<String>
+-        HYPRLAND_BACKEND => hyprland::move_window(window.window_id, x, y).await,
++        HYPRLAND_BACKEND => hyprland::move_window(window, x, y).await,
+@@ -266 +266 @@ pub async fn resize_window(window: &WindowInfo, width: i32, height: i32) -> Resu
+-        HYPRLAND_BACKEND => hyprland::resize_window(window.window_id, width, height).await,
++        HYPRLAND_BACKEND => hyprland::resize_window(window, width, height).await,
