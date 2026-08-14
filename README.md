@@ -61,7 +61,12 @@ reports that compatibility conversion, while points already inside the
 screenshot are never converted a second time. `perform_action` also treats
 `click`, `activate`, and `press` as semantic aliases for an unnamed primary
 AT-SPI action, and `set_value` verifies the AT-SPI value/text readback before
-returning success.
+returning success. `get_app_state` explicitly reports when the selected
+application returns an empty AT-SPI tree: that is an application limitation,
+not proof that semantic actions work. Use an accessible GTK/Qt test window
+such as Mousepad for `perform_action` and `set_value`; Kitty and some terminal
+applications can have a healthy AT-SPI connection while exposing no useful
+nodes.
 
 The `doctor` result exposes the coordinate contract explicitly on Hyprland: it
 reports whether `hyprctl monitors -j` and Grim are ready, the logical desktop
@@ -73,7 +78,10 @@ the replacement can be identified uniquely by the supplied PID, app ID/window
 class, and title. This recovery happens at the tool-target resolution boundary,
 so it also works when the stale ID disappears before the backend receives the
 request. The response identifies the old and new IDs. An ID without identity
-data cannot be recovered safely, and ambiguous matches fail closed. Grim is
+data cannot be recovered safely, and ambiguous matches fail closed with no
+action performed. The response says when a stale request was rejected so a
+test can distinguish a safe refusal from a successful identity-based recovery.
+Grim is
 preferred for Wayland sessions, while native X11 sessions keep their existing
 screenshot fallback.
 
