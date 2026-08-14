@@ -1,0 +1,407 @@
+diff --git a/computer-use-linux/src/atspi_tree.rs b/computer-use-linux/src/atspi_tree.rs
+index c835cdd..8a8d6ff 100644
+--- a/computer-use-linux/src/atspi_tree.rs
++++ b/computer-use-linux/src/atspi_tree.rs
+@@ -17 +17 @@ use std::{collections::VecDeque, future::Future, time::Duration};
+-use tokio::time::timeout;
++use tokio::time::{sleep, timeout};
+@@ -438,0 +439,9 @@ pub async fn set_element_value(object_ref_id: &str, value: &str) -> Result<Value
++            let updated_value = value_proxy
++                .current_value()
++                .await
++                .context("failed to read back the AT-SPI numeric value")?;
++            if !numeric_values_match(updated_value, numeric_value) {
++                return Err(anyhow!(
++                    "AT-SPI Value reported success, but read back {updated_value} instead of {numeric_value}"
++                ));
++            }
+@@ -440 +449 @@ pub async fn set_element_value(object_ref_id: &str, value: &str) -> Result<Value
+-                value: numeric_value,
++                value: updated_value,
+@@ -451 +460,14 @@ pub async fn set_element_value(object_ref_id: &str, value: &str) -> Result<Value
+-            return Ok(ValueSetInvocation::EditableText);
++            let mut updated_value = text_contents_from_proxies(&proxies).await?;
++            for _ in 0..2 {
++                if updated_value == value {
++                    return Ok(ValueSetInvocation::EditableText);
++                }
++                sleep(Duration::from_millis(20)).await;
++                updated_value = text_contents_from_proxies(&proxies).await?;
++            }
++            if updated_value == value {
++                return Ok(ValueSetInvocation::EditableText);
++            }
++            return Err(anyhow!(
++                "AT-SPI EditableText reported success, but read back {updated_value:?} instead of {value:?}"
++            ));
+@@ -793,0 +816,25 @@ async fn text_from_proxies(
++async fn text_contents_from_proxies(
++    proxies: &atspi::proxy::proxy_ext::Proxies<'_>,
++) -> Result<String> {
++    let text = proxies
++        .text()
++        .await
++        .context("element does not expose AT-SPI Text for readback")?;
++    let character_count = text
++        .character_count()
++        .await
++        .context("failed to read AT-SPI character count for readback")?
++        .max(0);
++    if character_count > MAX_TEXT_READBACK_CHARS {
++        return Err(anyhow!(
++            "AT-SPI text readback is limited to {MAX_TEXT_READBACK_CHARS} characters"
++        ));
++    }
++    if character_count == 0 {
++        return Ok(String::new());
++    }
++    text.get_text(0, character_count)
++        .await
++        .context("failed to read back AT-SPI editable text contents")
++}
++
+@@ -827,0 +875,10 @@ fn select_action_index(actions: &[atspi::Action], requested_action: Option<&str>
++        // A number of GTK/Chromium controls expose one unnamed primary action
++        // instead of naming it "click". Keep explicit semantic clicks aligned
++        // with the click tool's primary-action fallback, but only when the
++        // provider gave us no descriptive action metadata to choose from.
++        if is_primary_action_alias(&requested_action)
++            && actions.iter().all(action_has_no_name_or_description)
++        {
++            return Ok(0);
++        }
++
+@@ -840,0 +898,18 @@ fn select_action_index(actions: &[atspi::Action], requested_action: Option<&str>
++fn is_primary_action_alias(action: &str) -> bool {
++    matches!(action, "click" | "activate" | "press")
++}
++
++fn action_has_no_name_or_description(action: &atspi::Action) -> bool {
++    action_metadata_is_empty(&action.name) && action_metadata_is_empty(&action.description)
++}
++
++fn action_metadata_is_empty(value: &str) -> bool {
++    value.trim().trim_matches(':').is_empty()
++}
++
++fn numeric_values_match(actual: f64, expected: f64) -> bool {
++    actual.is_finite()
++        && expected.is_finite()
++        && (actual - expected).abs() <= 1e-6_f64.max(expected.abs() * 1e-6)
++}
++
+@@ -908,0 +984,11 @@ mod tests {
++    #[test]
++    fn select_action_index_maps_click_to_an_unnamed_primary_action() {
++        let actions = vec![atspi::Action {
++            name: String::new(),
++            description: String::new(),
++            keybinding: String::new(),
++        }];
++
++        assert_eq!(select_action_index(&actions, Some("click")).unwrap(), 0);
++    }
++
+diff --git a/computer-use-linux/src/server.rs b/computer-use-linux/src/server.rs
+index 6e71540..f9f47d6 100644
+--- a/computer-use-linux/src/server.rs
++++ b/computer-use-linux/src/server.rs
+@@ -588 +588 @@ impl ComputerUseLinux {
+-        description = "Click an element by index, semantic selector, or desktop coordinate pixels from screenshot metadata.",
++        description = "Click an element by index, semantic selector, or desktop coordinate pixels from screenshot metadata. On Hyprland, a valid negative compositor coordinate outside the screenshot is normalized to the current capture space.",
+@@ -725,0 +726 @@ impl ComputerUseLinux {
++        let (x, y, coordinate_note) = self.normalize_pointer_point(x, y).await;
+@@ -735,0 +737,4 @@ impl ComputerUseLinux {
++        let pointer_notes = coordinate_note
++            .into_iter()
++            .chain(off_screen_note)
++            .collect::<Vec<_>>();
+@@ -761 +766 @@ impl ComputerUseLinux {
+-                    off_screen_note,
++                    pointer_notes,
+@@ -775 +780 @@ impl ComputerUseLinux {
+-                        off_screen_note.clone(),
++                        pointer_notes.clone(),
+@@ -787 +792 @@ impl ComputerUseLinux {
+-                        off_screen_note,
++                        pointer_notes,
+@@ -801 +806 @@ impl ComputerUseLinux {
+-                    off_screen_note.clone(),
++                    pointer_notes.clone(),
+@@ -823 +828 @@ impl ComputerUseLinux {
+-                        off_screen_note.clone(),
++                        pointer_notes.clone(),
+@@ -830 +835 @@ impl ComputerUseLinux {
+-                        off_screen_note.clone(),
++                        pointer_notes.clone(),
+@@ -843 +848 @@ impl ComputerUseLinux {
+-                            off_screen_note.clone(),
++                            pointer_notes.clone(),
+@@ -866 +871 @@ impl ComputerUseLinux {
+-                                off_screen_note.clone(),
++                                pointer_notes.clone(),
+@@ -875 +880 @@ impl ComputerUseLinux {
+-                                off_screen_note.clone(),
++                                pointer_notes.clone(),
+@@ -887 +892 @@ impl ComputerUseLinux {
+-                        off_screen_note,
++                        pointer_notes,
+@@ -893 +898 @@ impl ComputerUseLinux {
+-                        off_screen_note,
++                        pointer_notes,
+@@ -933 +938 @@ impl ComputerUseLinux {
+-                return Json(with_notes(output, off_screen_note));
++                return Json(with_notes(output, pointer_notes));
+@@ -952 +957 @@ impl ComputerUseLinux {
+-            off_screen_note,
++            pointer_notes,
+@@ -958 +963 @@ impl ComputerUseLinux {
+-        description = "Invoke an accessibility action exposed by an element selected by index, identifier, or semantic selector. Defaults to the primary action unless action is provided.",
++        description = "Invoke an accessibility action exposed by an element selected by index, identifier, or semantic selector. Defaults to the primary action unless action is provided; semantic click/activate/press also falls back to an unnamed primary action.",
+@@ -977 +982 @@ impl ComputerUseLinux {
+-        description = "Set the value of a settable accessibility element selected by index, identifier, or semantic selector.",
++        description = "Set the value of a settable accessibility element selected by index, identifier, or semantic selector. The AT-SPI value or editable-text readback is verified before reporting success.",
+@@ -1035 +1040 @@ impl ComputerUseLinux {
+-        description = "Scroll an element in a direction by a number of pages. With a window target and no x/y/element_index, scrolls at the centre of the targeted window.",
++        description = "Scroll an element in a direction by a number of pages. With a window target and no x/y/element_index, scrolls at the centre of the targeted window. On Hyprland, a valid negative compositor coordinate outside the screenshot is normalized to the current capture space.",
+@@ -1186,0 +1192,7 @@ impl ComputerUseLinux {
++        let (target_point, coordinate_note) = match target_point {
++            Some((x, y)) => {
++                let (x, y, note) = self.normalize_pointer_point(x, y).await;
++                (Some((x, y)), note)
++            }
++            None => (None, None),
++        };
+@@ -1190,0 +1203,4 @@ impl ComputerUseLinux {
++        let pointer_notes = coordinate_note
++            .into_iter()
++            .chain(off_screen_note)
++            .collect::<Vec<_>>();
+@@ -1201 +1217 @@ impl ComputerUseLinux {
+-                    off_screen_note.clone(),
++                    pointer_notes.clone(),
+@@ -1222 +1238 @@ impl ComputerUseLinux {
+-                        off_screen_note.clone(),
++                        pointer_notes.clone(),
+@@ -1233 +1249 @@ impl ComputerUseLinux {
+-                        off_screen_note.clone(),
++                        pointer_notes.clone(),
+@@ -1249 +1265 @@ impl ComputerUseLinux {
+-                            off_screen_note.clone(),
++                            pointer_notes.clone(),
+@@ -1272 +1288 @@ impl ComputerUseLinux {
+-                                off_screen_note.clone(),
++                                pointer_notes.clone(),
+@@ -1283 +1299 @@ impl ComputerUseLinux {
+-                                off_screen_note.clone(),
++                                pointer_notes.clone(),
+@@ -1295 +1311 @@ impl ComputerUseLinux {
+-                        off_screen_note,
++                        pointer_notes.clone(),
+@@ -1301 +1317 @@ impl ComputerUseLinux {
+-                        off_screen_note,
++                        pointer_notes.clone(),
+@@ -1334 +1350 @@ impl ComputerUseLinux {
+-            off_screen_note,
++            pointer_notes,
+@@ -1340 +1356 @@ impl ComputerUseLinux {
+-        description = "Drag from one point to another using pixel coordinates.",
++        description = "Drag from one point to another using screenshot pixel coordinates. On Hyprland, valid negative compositor coordinates outside the screenshot are normalized to the current capture space.",
+@@ -1350,0 +1367,7 @@ impl ComputerUseLinux {
++        let (start_x, start_y, start_note) = self
++            .normalize_pointer_point(params.start_x, params.start_y)
++            .await;
++        let (end_x, end_y, end_note) = self
++            .normalize_pointer_point(params.end_x, params.end_y)
++            .await;
++        let pointer_notes = start_note.into_iter().chain(end_note).collect::<Vec<_>>();
+@@ -1354,2 +1377,2 @@ impl ComputerUseLinux {
+-            let start = (params.start_x, params.start_y);
+-            let end = (params.end_x, params.end_y);
++            let start = (start_x, start_y);
++            let end = (end_x, end_y);
+@@ -1384,7 +1407,10 @@ impl ComputerUseLinux {
+-                    return Json(pointer_action_result(ActionOutput {
+-                        ok: true,
+-                        implemented: true,
+-                        action: "drag".to_string(),
+-                        message: "Action sent through the uinput absolute pointer.".to_string(),
+-                        received,
+-                    }));
++                    return Json(with_notes(
++                        pointer_action_result(ActionOutput {
++                            ok: true,
++                            implemented: true,
++                            action: "drag".to_string(),
++                            message: "Action sent through the uinput absolute pointer.".to_string(),
++                            received,
++                        }),
++                        pointer_notes.clone(),
++                    ));
+@@ -1393,6 +1419,9 @@ impl ComputerUseLinux {
+-                    return Json(action_result(
+-                        "drag",
+-                        Err(format!(
+-                            "uinput drag may have started before it failed; the device was invalidated and input was not replayed through another backend: {error}"
+-                        )),
+-                        received,
++                    return Json(with_notes(
++                        action_result(
++                            "drag",
++                            Err(format!(
++                                "uinput drag may have started before it failed; the device was invalidated and input was not replayed through another backend: {error}"
++                            )),
++                            received,
++                        ),
++                        pointer_notes.clone(),
+@@ -1407,2 +1436 @@ impl ComputerUseLinux {
+-            let Some((start_x, start_y)) =
+-                self.logical_portal_point(&session, params.start_x, params.start_y)
++            let Some((start_x, start_y)) = self.logical_portal_point(&session, start_x, start_y)
+@@ -1415,3 +1443 @@ impl ComputerUseLinux {
+-            let Some((end_x, end_y)) =
+-                self.logical_portal_point(&session, params.end_x, params.end_y)
+-            else {
++            let Some((end_x, end_y)) = self.logical_portal_point(&session, end_x, end_y) else {
+@@ -1434,7 +1460,10 @@ impl ComputerUseLinux {
+-                    return Json(pointer_action_result(ActionOutput {
+-                        ok: true,
+-                        implemented: true,
+-                        action: "drag".to_string(),
+-                        message: "Action sent through the remote desktop portal.".to_string(),
+-                        received,
+-                    }));
++                    return Json(with_notes(
++                        pointer_action_result(ActionOutput {
++                            ok: true,
++                            implemented: true,
++                            action: "drag".to_string(),
++                            message: "Action sent through the remote desktop portal.".to_string(),
++                            received,
++                        }),
++                        pointer_notes.clone(),
++                    ));
+@@ -1454 +1483 @@ impl ComputerUseLinux {
+-                        self.logical_portal_point(&session, params.start_x, params.start_y)
++                        self.logical_portal_point(&session, start_x, start_y)
+@@ -1461,2 +1490 @@ impl ComputerUseLinux {
+-                    let Some((end_x, end_y)) =
+-                        self.logical_portal_point(&session, params.end_x, params.end_y)
++                    let Some((end_x, end_y)) = self.logical_portal_point(&session, end_x, end_y)
+@@ -1480,8 +1508,11 @@ impl ComputerUseLinux {
+-                            return Json(pointer_action_result(ActionOutput {
+-                                ok: true,
+-                                implemented: true,
+-                                action: "drag".to_string(),
+-                                message: "Action sent through the remote desktop portal."
+-                                    .to_string(),
+-                                received,
+-                            }));
++                            return Json(with_notes(
++                                pointer_action_result(ActionOutput {
++                                    ok: true,
++                                    implemented: true,
++                                    action: "drag".to_string(),
++                                    message: "Action sent through the remote desktop portal."
++                                        .to_string(),
++                                    received,
++                                }),
++                                pointer_notes.clone(),
++                            ));
+@@ -1512 +1543 @@ impl ComputerUseLinux {
+-            run_ydotool_drag(params.start_x, params.start_y, params.end_x, params.end_y).await
++            run_ydotool_drag(start_x, start_y, end_x, end_y).await
+@@ -1516,3 +1547,4 @@ impl ComputerUseLinux {
+-        Json(pointer_action_result(action_result(
+-            "drag", result, received,
+-        )))
++        Json(with_notes(
++            pointer_action_result(action_result("drag", result, received)),
++            pointer_notes,
++        ))
+@@ -3037,0 +3070,36 @@ impl ComputerUseLinux {
++    /// Accept a negative/outside-capture Hyprland compositor coordinate when
++    /// it maps unambiguously into the current screenshot. The primary
++    /// contract remains screenshot coordinates; this compatibility path fixes
++    /// the common case where AT-SPI supplies a valid point on a monitor whose
++    /// compositor origin is negative.
++    async fn normalize_pointer_point(&self, x: i32, y: i32) -> (i32, i32, Option<String>) {
++        let Some((_, _, capture_width, capture_height)) = self.capture_space_rect().await else {
++            return (x, y, None);
++        };
++        let inside_capture = x >= 0 && y >= 0 && x < capture_width && y < capture_height;
++        if inside_capture
++            || (!env_contains("XDG_CURRENT_DESKTOP", "hyprland")
++                && !env_var_non_empty("HYPRLAND_INSTANCE_SIGNATURE"))
++        {
++            return (x, y, None);
++        }
++
++        let Some([mapped_x, mapped_y]) =
++            crate::windowing::backends::hyprland::capture_point_from_hyprland(
++                [x, y],
++                (capture_width as u32, capture_height as u32),
++            )
++            .await
++        else {
++            return (x, y, None);
++        };
++
++        (
++            mapped_x,
++            mapped_y,
++            Some(format!(
++                "Mapped Hyprland compositor coordinate {x},{y} to screenshot coordinate {mapped_x},{mapped_y}."
++            )),
++        )
++    }
++
+diff --git a/computer-use-linux/src/windowing/backends/hyprland.rs b/computer-use-linux/src/windowing/backends/hyprland.rs
+index 01c9535..77307d7 100644
+--- a/computer-use-linux/src/windowing/backends/hyprland.rs
++++ b/computer-use-linux/src/windowing/backends/hyprland.rs
+@@ -216,0 +217,12 @@ impl HyprlandCaptureLayout {
++    /// Convert a Hyprland compositor/global point back into the logical
++    /// screenshot space used by pointer input. This is intentionally separate
++    /// from `capture_point_to_hyprland`: callers should use it only after
++    /// determining that a point is outside the capture rectangle, because
++    /// positive coordinates can be valid in both spaces.
++    fn hyprland_point_to_capture(&self, point: [i32; 2]) -> Result<[i32; 2]> {
++        Ok([
++            self.hyprland_coordinate_to_capture(point[0], self.origin_x)?,
++            self.hyprland_coordinate_to_capture(point[1], self.origin_y)?,
++        ])
++    }
++
+@@ -234,0 +247,8 @@ impl HyprlandCaptureLayout {
++    fn hyprland_coordinate_to_capture(&self, value: i32, origin: i32) -> Result<i32> {
++        let mapped = (f64::from(value) - f64::from(origin)) * self.scale;
++        if !mapped.is_finite() || mapped < f64::from(i32::MIN) || mapped > f64::from(i32::MAX) {
++            bail!("Hyprland coordinate {value} cannot be mapped to capture coordinates");
++        }
++        Ok(mapped.round() as i32)
++    }
++
+@@ -379,0 +400,17 @@ async fn capture_layout() -> Result<HyprlandCaptureLayout> {
++/// Best-effort conversion for a negative/outside-capture coordinate supplied
++/// in Hyprland's compositor/global coordinate space. The normal public
++/// contract remains screenshot coordinates; this compatibility path exists
++/// for AT-SPI/window geometry values on monitors with negative origins.
++pub(crate) async fn capture_point_from_hyprland(
++    point: [i32; 2],
++    capture_size: (u32, u32),
++) -> Option<[i32; 2]> {
++    let layout = capture_layout().await.ok()?;
++    let mapped = layout.hyprland_point_to_capture(point).ok()?;
++    (mapped[0] >= 0
++        && mapped[1] >= 0
++        && mapped[0] < i32::try_from(capture_size.0).ok()?
++        && mapped[1] < i32::try_from(capture_size.1).ok()?)
++    .then_some(mapped)
++}
++
+@@ -804,0 +842,4 @@ mod tests {
++        assert_eq!(
++            layout.hyprland_point_to_capture([-1018, 586]).unwrap(),
++            [62, 586]
++        );

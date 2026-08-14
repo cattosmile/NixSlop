@@ -53,6 +53,16 @@ monitor resolutions, fractional scaling, negative monitor origins, or rotated
 outputs. The image is intentionally logical-sized; it avoids requiring the
 agent to apply a monitor-specific 1.5x conversion.
 
+The normal pointer contract remains the screenshot's 0-based capture space. On
+Hyprland, pointer tools also recognize a valid compositor/global point that is
+outside that capture rectangle—most importantly negative coordinates on a
+monitor placed to the left—and normalize it once before dispatch. The result
+reports that compatibility conversion, while points already inside the
+screenshot are never converted a second time. `perform_action` also treats
+`click`, `activate`, and `press` as semantic aliases for an unnamed primary
+AT-SPI action, and `set_value` verifies the AT-SPI value/text readback before
+returning success.
+
 The `doctor` result exposes the coordinate contract explicitly on Hyprland: it
 reports whether `hyprctl monitors -j` and Grim are ready, the logical desktop
 origin, monitor count, and capture scale. Geometry operations reread monitor

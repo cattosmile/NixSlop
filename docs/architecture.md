@@ -50,6 +50,14 @@ variant is enabled, the Home Manager activation also registers the local
 the immutable package alone only makes that plugin available in the bundled
 marketplace.
 
+The public pointer contract is still the screenshot's 0-based capture space.
+For Hyprland only, an out-of-capture point that is valid in compositor/global
+space—such as a negative coordinate on a left-hand monitor—is normalized once
+before dispatch. The helper reports that conversion and leaves points already
+inside the capture unchanged. Semantic `perform_action` aliases (`click`,
+`activate`, and `press`) can invoke an unnamed primary AT-SPI action, while
+`set_value` requires a successful value/text readback before returning `ok`.
+
 The runtime reports this coordinate contract through `doctor`, including the
 logical origin, monitor count, capture scale, and Grim/Hyprland readiness.
 Move/resize requests reread the live monitor layout and retry one stale window

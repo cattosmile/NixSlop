@@ -47,10 +47,23 @@ eigens geöffnetes Testfenster mit klaren Zielen. Für einen semantischen Klick
 verwende einen sichtbaren Button, Checkbox- oder Toggle-Zustand und verifiziere
 die Zustandsänderung; ein Tab kann trotz korrektem Pointer-Klick seine Auswahl
 wegen eigener App-Logik unverändert lassen. Für `set_value` verwende ein
-wirklich editierbares Textfeld. Für `press_key` und `type_text` verwende ein
-temporäres Terminal oder Textfeld und verifiziere den tatsächlichen Inhalt,
-einschließlich Unterstrich, Bindestrich, Zahlen und Großbuchstaben, zum
-Beispiel `CUA_TEXT_OK_-_0123`.
+wirklich editierbares Textfeld und akzeptiere `ok: true` nur, wenn ein frischer
+AT-SPI-Readback exakt den gesetzten Wert enthält. Falls der Readback leer oder
+veraltet bleibt, melde die tatsächliche Tool-Fehlermeldung und teste danach mit
+einem frischen `element_index` oder eindeutigen Selector weiter. Prüfe außerdem
+`perform_action` mit `action: "click"` an einem Element, dessen AT-SPI-
+Primäraktion namenlos ist; der Aufruf soll auf die Primäraktion zurückfallen.
+Für `press_key` und `type_text` verwende ein temporäres Terminal oder Textfeld
+und verifiziere den tatsächlichen Inhalt, einschließlich Unterstrich,
+Bindestrich, Zahlen und Großbuchstaben, zum Beispiel `CUA_TEXT_OK_-_0123`.
+
+Auf Hyprland sind Screenshot-/Pointer-Koordinaten normalerweise 0-basierte
+Capture-Pixel. Teste auf dem Monitor mit negativem Ursprung zusätzlich einen
+gültigen negativen Hyprland-Globalpunkt (zum Beispiel direkt aus einem AT-SPI-
+oder Fenster-Bounds-Ergebnis). Der Plugin-Helper darf diesen Punkt genau einmal
+in den Capture-Raum normalisieren und muss die Umrechnung im Ergebnis erwähnen;
+ein Punkt, der bereits im Screenshot-Raum liegt, darf nicht doppelt umgerechnet
+werden.
 
 3. Stale-window-Recovery
 
@@ -81,6 +94,12 @@ jeweils einen Vollbild-Screenshot und prüfe Fokus, Monitor und Koordinaten.
 Teste außerdem eine reversible Fensterbewegung und Größenänderung auf beiden
 Monitoren. Achte besonders auf negative Ursprünge, unterschiedliche
 Auflösungen, Fractional Scaling und den gedrehten Monitor.
+
+Für `scroll` verwende ein temporäres, tatsächlich scrollbares Testziel: öffne
+zum Beispiel ein Terminal mit vielen nummerierten Zeilen oder eine lokale
+scrollbare Testansicht, fotografiere den Ausgangszustand, scrolle und verifiziere
+eine sichtbare Änderung. Ein statisches/nicht scrollbares Chat-Fenster zählt nur
+als „Aktion gesendet“, nicht als vollständig verifizierter Scroll-Erfolg.
 
 Gib am Ende aus:
 - eine Liste aller 18 Funktionen mit `✅`, `⚠️` oder `❌`;
