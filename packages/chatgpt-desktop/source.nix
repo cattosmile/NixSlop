@@ -1,15 +1,15 @@
 {
-  version = "26.930.51102";
+  version = "26.930.61225";
 
   sources = {
     x86_64-linux = {
-      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.930.51102_amd64.deb";
-      hash = "sha256-Y3w8lLxQ+O4zoV4uKOx/kqeH8JQ+cA7+ERvAvw1IE7Q=";
+      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.930.61225_amd64.deb";
+      hash = "sha256-uQqA+TU7wSpaW4RpUCqOV5SjxUo3HIiA4JTVAN5pW7g=";
     };
 
     aarch64-linux = {
-      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.930.51102_arm64.deb";
-      hash = "sha256-BNAjFVTTE+E6sdnlM2TI8P81N8RseDRa0u6wXwOaTXo=";
+      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.930.61225_arm64.deb";
+      hash = "sha256-VBtHRKE6eXK92wUZiH1PYmNA7TmHgX01vK9f6ING1r0=";
     };
   };
 }
